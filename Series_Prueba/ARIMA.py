@@ -1,7 +1,22 @@
 import numpy as np
 
-def arima_serie(T, change_points, param_changes, p=1, q=1, seed=None):
 
+def arima_serie(T, change_points, param_changes, p=1, q=1, seed=None):
+    '''
+    Genera una serie temporal sintética tipo ARIMA
+    de longitud T, donde los parámetros del modelo pueden cambiar en ciertos puntos
+    del tiempo.
+    En los puntos de cambio, indicados por la lista change_points, los parámetros del modelo
+    se actualizan según param_changes, permitiendo simular cambios de comportamiento 
+    en la serie.
+
+    Parámetros:
+    - T: longitud de la serie
+    - change_points: lista de puntos de cambio
+    - param_changes: nuevos valores de parámetros en cada cambio
+    - p, q: órdenes del modelo AR y MA
+    - seed: semilla
+    '''
     if seed is not None:
         np.random.seed(seed)
 

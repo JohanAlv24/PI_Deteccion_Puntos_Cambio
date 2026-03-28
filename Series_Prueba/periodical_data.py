@@ -35,8 +35,7 @@ def _generate_cps(n_subgrupos, inicio_cp, fin_cp, separacion_minima, min_cps, ma
         if len(rejilla) < total_cps:
             paso = max(1, separacion_minima // 2)
             rejilla = list(range(inicio_cp, fin_cp, paso))
-        if len(rejilla) < total_cps:
-            raise RuntimeError("Ajusta 'd' o 'separacion_minima'; no hay suficientes posiciones para CPs.")
+       
         seleccionadas = np.random.choice(rejilla, size=total_cps, replace=False)
         cps_principales = {}
         idx = 0

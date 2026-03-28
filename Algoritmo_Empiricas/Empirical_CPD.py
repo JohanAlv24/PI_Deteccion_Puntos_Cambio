@@ -6,7 +6,12 @@ from Algoritmo_Empiricas.workers_empirical import init_worker_empirical, evaluat
 
 
 class EmpiricalCPD():
-
+    '''
+    X: serie de tiempo
+    window: Tamaño de la ventana
+    sigma: Valor del parámetro del filtro gaussiano
+    k_gauss: Condicional para aplicar filtro gaussiano a la curva de distancias de Wasserstein
+    '''
     def __init__(self, X, window=0, sigma=2, k_gauss=True):
 
         self.Serie = np.asarray(X, dtype=np.float64)
@@ -18,6 +23,7 @@ class EmpiricalCPD():
         self._weights = None
 
     @staticmethod
+    #beta corresponde al tamaño de ventana. Aquí se calcula la distancia de Wasserstein empírica y se retorna la curva rugosa de distancias
     def empirical_cpd(serie, beta):
 
         X = np.array([
@@ -36,7 +42,7 @@ class EmpiricalCPD():
 
         return np.array(d)
 
-
+    #Calcula la distancia de Wasserstein entre ventanas consecutivas no traslapadas de la serie de tiempo y retorna la curva de distancia suavizada
     def distancias(self):
 
         w = self.window
@@ -67,7 +73,14 @@ class EmpiricalCPD():
 
 
     def segment_cost_mle(self, start, end, sorted_unique, weights):
-
+        '''
+        Calcula el costo de un segmento de la serie temporal bajo el enfoque de máxima verosimilitud
+        basado en la entropía de una distribución empírica.
+        Los parámetros:
+        start, end: índices que delimitan el segmento 
+        sorted_unique: valores únicos ordenados de la serie 
+        weights: pesos asociados a cada valor (el artículo ya da una formulación para estos pesos)
+        '''
         segment = self.Serie[start:end]
 
         n = len(segment)
@@ -88,7 +101,11 @@ class EmpiricalCPD():
 
         return -n * np.sum(entropy_term * weights)
 
-
+    '''
+    La función total_cost recibe la lista de puntos de cambio (change_poins) y aplica la función de coste a cada segmento
+    para hallar la función de coste total. En esta función también se añade retorna el factor de penalización pero es integrado 
+    en el proceso de optimización
+    '''
     def total_cost(self, change_points, penal=True):
 
         sorted_unique, weights = self.mle()
@@ -117,7 +134,12 @@ class EmpiricalCPD():
 
         return total
 
-
+    '''
+    Realiza la búsque exhaustiva del tamaño de ventana. 
+    min_w y max_w definen el intervalo de búsqueda para la ventana, penal es un condicional
+    para incorporar la penalización y lambda_p es el regularizador que por defecto es -1
+    para llevarlo al mismo orden del coste (1/(log(T)*T))
+    '''
     def opt_window(self,
                    min_w=None,
                    max_w=None,

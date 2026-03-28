@@ -4,14 +4,20 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.linalg import fractional_matrix_power, logm
 from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel
 from scipy.stats import norm
 from Algoritmo_Gaussiano.workers import init_worker, evaluate_params_worker, local_search_sa_worker
 
-
 class CPD():
-
+    '''
+    X: serie de tiempo
+    window: Tamaño de la ventana
+    t: Retardo para aplicar el teorema de Takens
+    m: Dimensión de los embeddings para aplicar el teorema de Takens
+    medias: Condicional para usar la media en la distancia de Wasserstein
+    sigma: Valor del parámetro del filtro gaussiano
+    k_gauss: Condicional para aplicar filtro gaussiano a la curva de distancias de Wasserstein
+    n_perm: Parámetro en desuso para la prueba de permutación
+    '''
     def __init__(self, X, window = 0, t = 0, m = 3,
                  medias = True, sigma = 2, k_gauss = True, n_perm = 0):
         
@@ -30,13 +36,7 @@ class CPD():
         self._sorted_unique = None
         self._weights = None
 
-    def _ensure_sorted_unique_weights(self):
-        if self._sorted_unique is None or self._weights is None:
-            self._sorted_unique, self._weights = self.mle()
-        return self._sorted_unique, self._weights
-
-
-
+    #La función Gaussian() genera la matriz de covarianzas y el vector de medias asociados a cada ventana de la serie de tiempo
     def Gaussian(self):
 
         serie = self.Serie
@@ -83,7 +83,11 @@ class CPD():
         self.embeddings_list = np.array(embeddings_firsts)
 
     # ---------------------------
+    '''
+    distancias() calcula la distancia de Wasserstein entre ventanas consecutivas no traslapadas de manera
+    vectorizada, por lo que devuelve la curva de distancias
 
+    ''' 
     def distancias(self):
         self.Gaussian()
         d = []
@@ -104,7 +108,13 @@ class CPD():
         #return np.convolve(d, self.kernel_triangular(), mode='same')
         return d
 
+    '''
+    traces() recibe dos arreglos de matrices de covarianza (S1 y S2) y calcula, de forma vectorizada,
+    el término de traza de la distancia de Wasserstein para cada par correspondiente de matrices.
 
+    En particular, computa:
+    tr(S1 + S2 - 2 * (S1^{1/2} S2 S1^{1/2})^{1/2})
+    '''
     def traces(self, S1, S2, eps=1e-12):
         
         S1 = 0.5 * (S1 + S1.transpose(0,2,1))
@@ -132,7 +142,7 @@ class CPD():
         return traces
 
 
-        
+    #Tangent() hace la proyección de las matrices de covarianza al plano tangente. Este método se usa para la etapa de clusterización
     def tangent(self, cov=None):
         if cov is not None:
             m_cov = cov
@@ -171,7 +181,16 @@ class CPD():
         self._weights = weights
         return sorted_unique, weights
 
+
     def segment_cost_mle(self, start, end, sorted_unique, weights):
+        '''
+        Calcula el costo de un segmento de la serie temporal bajo el enfoque de máxima verosimilitud
+        basado en la entropía de una distribución empírica.
+        Los parámetros:
+        start, end: índices que delimitan el segmento 
+        sorted_unique: valores únicos ordenados de la serie 
+        weights: pesos asociados a cada valor (el artículo ya da una formulación para estos pesos)
+        '''
         segment = self.Serie[start:end]
         n = len(segment)
 
@@ -186,6 +205,11 @@ class CPD():
 
         return -n * np.sum(entropy_term * weights)
 
+    '''
+    La función total_cost recibe la lista de puntos de cambio (change_poins) y aplica la función de coste a cada segmento
+    para hallar la función de coste total. En esta función también se añade retorna el factor de penalización pero es integrado 
+    en el proceso de optimización
+    '''
     def total_cost(self, change_points, penal = True):
         sorted_unique, weights = self.mle()
         total = 0.0
@@ -204,8 +228,13 @@ class CPD():
             penalty = 0.5*(beta * (len(change_points)) + np.sum(np.log(np.diff(change_points/T))))
             return total, penalty
         return total
-
-
+    '''
+    Realiza la búsque exhaustiva de los parámetros t (retardo) y w (tamaño de ventana). 
+    El parámetro m (dimensión de la matriz de covarianzas) se fija en 3.
+    min_w y max_w definen el intervalo de búsqueda para la ventana, penal es un condicional
+    para incorporar la penalización y lambda_p es el regularizador que por defecto es -1
+    para llevarlo al mismo orden del coste (1/(log(T)*T))
+    '''
     def opt_window_t(self, min_w = None,
                      max_w = None, penal = False, lambda_p = -1):
 
@@ -270,12 +299,18 @@ class CPD():
 
         if best_params is not None:
             self.window, self.t = best_params
+            #Se acota la desviación estándar del filtro gaussiano en 12 para evitar suavizar en exceso la curva de distancias con grandes tamaños de ventana
             self.sigma_filter = min(math.ceil(math.sqrt(self.window)), 12)
         if penal:
             return best_dist, best_cp, espacio, f_costos, penalizaciones
      
         return best_dist, best_cp, espacio
     
+    '''
+    Esta función es análoga a la anterior, pero por medio del metaheurístico que se le da en workers.
+    Los parámetros cumplen la misma función añadiendo la máxima cantidad de iteraciones por búsqueda del
+    metaheurístico.
+    '''
     def heuristic_window_t(self, min_w=None, max_w=None, penal=False, lambda_p=-1, max_iter=50):
 
         T = len(self.Serie)
@@ -327,6 +362,7 @@ class CPD():
 
         if best_params is not None:
             self.window, self.t = best_params
+            #Se acota la desviación estándar del filtro gaussiano en 12 para evitar suavizar en exceso la curva de distancias con grandes tamaños de ventana
             self.sigma_filter = min(int(np.sqrt(self.window)) + 1, 12)
 
         return best_dist, best_cp

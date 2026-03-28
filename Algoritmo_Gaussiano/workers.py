@@ -3,15 +3,14 @@ from Utils.detection import detect
 
 _SHARED_SERIE = None
 
-
+#Función utilizada para la paralelización
 def init_worker(shared_array, length):
     global _SHARED_SERIE
     _SHARED_SERIE = np.frombuffer(shared_array, dtype=np.float64)[:length]
 
-
+#Hace la evaluación de la función de coste para los parámetros (w, t) por fuerza bruta
 def evaluate_params_worker(args):
 
-    # IMPORT AQUÍ
     from cpd import CPD
 
     w, t, penal, lambda_p, class_defaults = args
@@ -44,11 +43,18 @@ def evaluate_params_worker(args):
         return (total, penalty, w, t, cps, distancias)
     
 
-
+'''
+Se aplica un metaheurístico híbrido que hace una búsqueda global con recocido simulado y ante cada mejora una búsqueda local
+por first improvement. 
+args contiene los parámetros:
+(w0, t0): el punto inicial de búsqueda
+min_w, max_w: Espacio de búsqueda para el tamaño de ventana
+penal, lambda_p: Condicional y regularizador de la penalización
+class_defaults: Parámetros en desuso del objeto CPD
+max_iter: máxima cantidad de iteraciones para el metaheurístico
+'''
 def local_search_sa_worker(args):
     from cpd import CPD
-    import numpy as np
-    import os
 
     w0, t0, min_w, max_w, penal, lambda_p, class_defaults, max_iter = args
 

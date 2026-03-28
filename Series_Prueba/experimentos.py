@@ -5,6 +5,9 @@ from Utils.detection import detect
 from Utils.metrics_sup import metrics
 from Series_Prueba.periodical_data import generar_series_pc, serie_pc
 
+
+
+#Condición de estabilidad para los rezagos
 def sample_stationary_ar2():
     while True:
         phi1 = np.random.uniform(-0.9, 0.9)
@@ -15,7 +18,7 @@ def sample_stationary_ar2():
             phi2 - phi1 < 1):
             return np.array([phi1, phi2])
 
-
+#Condición de estabilidad para los rezagos
 def sample_invertible_ma2():
     while True:
         theta1 = np.random.uniform(-0.9, 0.9)
@@ -25,7 +28,8 @@ def sample_invertible_ma2():
             theta1 + theta2 < 1 and
             theta2 - theta1 < 1):
             return np.array([theta1, theta2])
-        
+
+#La función genera la serie de tiempo ARMA descrita en el artículo de revisión de métodos de detección de puntos de cambio
 def ar2_noise(
     T=2000,
     phi=(0.3, 0.5),
@@ -110,7 +114,6 @@ def ar2_noise(
     x[outlier_idx] += eps[outlier_idx]
 
     return x, sorted(cps), outlier_idx
-
 
 
 def samples_200_arma(seed, penal, lambda_p, N=200, window=30, t=0, m=0, f_gauss=6, thr_dist=30,

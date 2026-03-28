@@ -1,6 +1,11 @@
 import numpy as np
 from scipy.signal import find_peaks
-
+'''
+La función detect() recibe como entrada el vector de distancias (ya sea de Wasserstein o basado en distribuciones empíricas) 
+y el tamaño de ventana utilizado. A partir de este vector identifica sus picos y luego conserva únicamente aquellos cuya altura 
+supere en al menos un percentil 5 la de alguno de los valles adyacentes. Los extremos también son considerados valles o picos según 
+sea el caso.
+'''
 def detect(distancias, window, alpha=0.05, thr=0):
     distancias = np.asarray(distancias)
     n = distancias.size

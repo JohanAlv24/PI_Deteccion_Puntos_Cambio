@@ -5,6 +5,7 @@ from Utils.detection import detect
 _SHARED_SERIE = None
 
 
+#Función utilizada para la paralelización
 def init_worker_empirical(shared_array, length):
 
     global _SHARED_SERIE
@@ -12,7 +13,7 @@ def init_worker_empirical(shared_array, length):
     _SHARED_SERIE = np.frombuffer(shared_array, dtype=np.float64)
     _SHARED_SERIE = _SHARED_SERIE[:length]
 
-
+#Hace la evaluación de la función de coste para cada w por fuerza bruta
 def evaluate_window_worker(task):
     from Empirical_CPD import EmpiricalCPD
 

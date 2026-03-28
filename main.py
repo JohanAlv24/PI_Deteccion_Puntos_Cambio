@@ -67,6 +67,10 @@ def graficar_dispersion_costo(start, end, CPD, espacio, title, path):
     plt.tight_layout()
     plt.savefig(path, dpi=300, bbox_inches="tight")
 
+'''
+Función para probar los métodos de optimización en la serie de tiempo periódica con ruido. Tiene la condición heuristic para
+usar el metaheurístico en lugar de la búsqueda exhaustiva para el método de distancia de Wasserstein entre gaussianas
+'''
 def cpd_serie_periodica(path, tran_mat, exp, pc_params, min_w1, n, length, sigma_amp, 
                         sigma_freq, sigma_fase, sigma_pend, sigma_ruido, gauss, 
                         min_w2=None, max_w=None, penal=True, lambda_p = 1e-3, thr=30, seed1=123, seed2=123, heuristic=False, max_iter=50, show=False):
@@ -151,6 +155,11 @@ def cpd_serie_periodica(path, tran_mat, exp, pc_params, min_w1, n, length, sigma
     return metricas_cpd
 
 
+'''
+Función para probar los métodos de optimización en una serie de tiempo ARMA controlada (se dan los puntos de cambio de forma explícita). 
+Tiene la condición heuristic para usar el metaheurístico en lugar de la búsqueda exhaustiva para el método de distancia 
+de Wasserstein entre gaussianas
+'''
 def cpd_serie_arma(path, T, changes_arima, param_changes, p, q, thr=30, min_w=None, max_w=None, penal=True, lambda_p=1e-3, gauss=True, seed=123, heuristic=False):
 
     x_arima = arima_serie(
@@ -282,6 +291,11 @@ def boxplot_comp(M1, M2, columnas, title):
     plt.title(title)
     plt.show()
 
+'''
+Función para probar los métodos de optimización en una serie de tiempo ARMA aleatoria (los puntos de cambio son aleatorios). 
+Solo se utiliza el método de empíricas pues la idea de esta función es observar el comportamiento de la función de coste y la penalización
+para distintos tamaños de la serie de tiempo
+'''
 def arma_exp(seed, penal, path, window=30, t=0, m=0, f_gauss=6,
             T=2000, phi=(0.3, 0.5), theta=(0.0, 0.0), random_phi=False,
             random_theta=False, min_seg=50, max_seg=150, base_mean=0.0,
@@ -308,6 +322,9 @@ def arma_exp(seed, penal, path, window=30, t=0, m=0, f_gauss=6,
 
 if __name__ == "__main__":
     casos_base = True
+    '''
+    Condicional para probar ambos método en casos base (una sola simulación con semilla fija) 
+    '''
     if casos_base:
         penal = True
         heuristic = True
@@ -482,7 +499,9 @@ if __name__ == "__main__":
         df.insert(0, 'Metodo', nombres)
         df.to_excel('Tablas_Métricas/Métricas_heurística.xlsx', index=False)
     
-
+    '''
+    Condicional para probar ambos método en experimentos de 200 simulaciones
+    '''
     experimentos = False
     if experimentos:
         
@@ -528,6 +547,9 @@ if __name__ == "__main__":
                     M8=met_emp_sin
                 )
     
+    '''
+    Condicional para graficar la penalización y la función de coste para diferentes tamaños de la serie de tiempo
+    '''
     casos_orden = False
     if casos_orden:
         penal = True
