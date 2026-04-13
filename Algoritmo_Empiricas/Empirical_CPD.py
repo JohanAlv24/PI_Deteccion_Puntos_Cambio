@@ -106,6 +106,16 @@ class EmpiricalCPD():
     para hallar la función de coste total. En esta función también se añade retorna el factor de penalización pero es integrado 
     en el proceso de optimización
     '''
+
+    def cost_mean(self, start, end):
+        segment = self.Serie[start:end]
+
+        n = len(segment)
+        mean = np.mean(self.Serie)
+        segment_mean = np.mean(segment)
+        return n*((segment_mean-mean)**2)
+    
+
     def total_cost(self, change_points, penal=True):
 
         sorted_unique, weights = self.mle()
@@ -113,13 +123,16 @@ class EmpiricalCPD():
         total = 0.0
 
         for i in range(len(change_points) - 1):
-
+            '''
             total += self.segment_cost_mle(
                 change_points[i],
                 change_points[i + 1],
                 sorted_unique,
                 weights
-            )
+            )'''
+            total += self.cost_mean(
+                change_points[i],
+                change_points[i + 1])
 
         if penal:
 

@@ -15,7 +15,7 @@ def init_worker_empirical(shared_array, length):
 
 #Hace la evaluación de la función de coste para cada w por fuerza bruta
 def evaluate_window_worker(task):
-    from Empirical_CPD import EmpiricalCPD
+    from Algoritmo_Empiricas.Empirical_CPD import EmpiricalCPD
 
 
     w, penal, lambda_p, config = task

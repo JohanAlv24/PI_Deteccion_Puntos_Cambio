@@ -11,7 +11,7 @@ def init_worker(shared_array, length):
 #Hace la evaluación de la función de coste para los parámetros (w, t) por fuerza bruta
 def evaluate_params_worker(args):
 
-    from cpd import CPD
+    from Algoritmo_Gaussiano.cpd import CPD
 
     w, t, penal, lambda_p, class_defaults = args
 

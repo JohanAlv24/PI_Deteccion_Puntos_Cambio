@@ -12,12 +12,15 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-def graficar_mapa_calor(start, end, CPD, espacio, title, path, show=False):
+def graficar_mapa_calor(start, end, CPD, espacio, title, path, show=False, object_use=True):
     print(f'Tiempo de ejecución {end-start} segundos')
         
-
-    print(f'Mejor ventana método gaussiano: {CPD.window}')
-    print(f'Mejor retardo método gaussiano: {CPD.t}')
+    if object_use:
+        print(f'Mejor ventana método gaussiano: {CPD.window}')
+        print(f'Mejor retardo método gaussiano: {CPD.t}')
+    else:
+        print(f'Mejor ventana método gaussiano: {CPD[0]}')
+        print(f'Mejor retardo método gaussiano: {CPD[1]}')
 
     ws = sorted(set(k[0] for k in espacio.keys()))
     ts = sorted(set(k[1] for k in espacio.keys()))
@@ -150,8 +153,10 @@ def cpd_serie_periodica(path, tran_mat, exp, pc_params, min_w1, n, length, sigma
         w_b = CPD_Periodica_emp.window
         metricas_cpd = metrics(cps, best_cp_emp, thr, T_ruido)
         metricas_cpd[0]['w'] = w_b
-    if not heuristic:
+    '''if not heuristic and gauss:
         return metricas_cpd, espacio
+    if not heuristic and not gauss:
+        return metricas_cpd, espacio_emp'''
     return metricas_cpd
 
 
@@ -301,7 +306,7 @@ def arma_exp(seed, penal, path, window=30, t=0, m=0, f_gauss=6,
             random_theta=False, min_seg=50, max_seg=150, base_mean=0.0,
             random_mean=True, mean_range=(-1.0, 1.0), base_std=0.5, 
             random_std=True, std_range=(0.2, 1.2), outlier_interval=200,
-            outlier_scale=6.0, seed2=None):
+            outlier_scale=6.0, seed2=None, lambda_p=0, s_thresh=0):
     np.random.seed(seed)
     dataset, cps, outliers = ar2_noise(T, phi, theta, random_phi,
                                         random_theta, min_seg, max_seg, base_mean,
@@ -311,23 +316,64 @@ def arma_exp(seed, penal, path, window=30, t=0, m=0, f_gauss=6,
                                         )
 
     start = time.time()
-    PC_dataset1_emp = EmpiricalCPD(dataset)
-    best_dist, pc_detectados_dataset1_emp, espacio, f_costos_emp, penalizaciones_emp = PC_dataset1_emp.opt_window(max_w=T//10, penal=penal, lambda_p = 1/(3*np.log(T)*T**0.5))
+    plt.figure(figsize=(10,6))
+    plt.plot(dataset)
+    plt.show()
+    print(len(cps))
+    CPD_dataset1 = CPD(dataset)
+    
+    best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window_t(max_w=T//10, penal=penal, lambda_p = lambda_p, join=False)
     end = time.time()
-    graficar_dispersion_costo(start, end, PC_dataset1_emp, espacio, " Costo vs tamaño de ventana (método empírico) "+str(T), path+' empírica coste con penalización')
-    graficar_dispersion_costo(start, end, PC_dataset1_emp, f_costos_emp, "Solo Costo vs tamaño de ventana (método empírico) "+str(T), path+' empírica solo coste')
-    graficar_dispersion_costo(start, end, PC_dataset1_emp, penalizaciones_emp, "Penalización vs tamaño de ventana (método empírico) "+str(T), path+' empírica solo penalización')
+    '''if lambda_p != 0:
+        graficar_dispersion_costo(start, end, CPD_dataset1, espacio, " Costo vs tamaño de ventana (método empírico) "+str(T), path+' empírica coste con penalización')'''
 
-    return metrics(cps, pc_detectados_dataset1_emp, 30, T)
+    graficar_mapa_calor(start, end, CPD_dataset1, f_costos, "Solo Costo vs tamaño de ventana "+str(T), path+' gaussiana solo coste')
+    graficar_mapa_calor(start, end, CPD_dataset1, penalizaciones, "Penalización vs tamaño de ventana "+str(T), path+' gaussiana solo penalización')
+
+    betha = CPD_dataset1.slope_heuristic_regression(s_thresh, f_costos, penalizaciones, plot=True, path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope')
+
+    return betha, f_costos, penalizaciones, metrics(cps, pc_detectados_dataset1, 30, T)
+
+
+def penalized_costs(costs, penals, beta):
+
+    result = {
+        key: costs[key] + beta * penals[key]
+        for key in costs
+    }
+    best_key = min(result, key=result.get)
+    return best_key, result
+
+def best_params_sh(dataset, cps, path, name, s_thresh, penal=True, lambda_p=0):
+
+    CPD_dataset1 = CPD(dataset)
+    T = len(dataset)
+    start = time.time()
+    best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window_t(max_w=T//10, penal=penal, lambda_p = lambda_p, join=False)
+    end = time.time()
+
+    graficar_mapa_calor(start, end, CPD_dataset1, f_costos, "Mapa de calor solo costo "+str(T), path+' gaussiana solo coste '+name)
+    graficar_mapa_calor(start, end, CPD_dataset1, penalizaciones, "Mapa de calor penalización "+str(T), path+' gaussiana solo penalización '+name)
+
+    betha = CPD_dataset1.slope_heuristic_regression(s_thresh, f_costos, penalizaciones, plot=True, path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope '+name)
+
+    best_key, result = penalized_costs(f_costos, penalizaciones, 2*betha)
+    graficar_mapa_calor(0, 0, best_key, result, "Mapa de calor costo "+str(T)+" regularización: "+str(round(betha, 4)), 'Gráficas/Heuristic_Slope/coste '+name, object_use=False)
+    print(f'Mejor w: {best_key[0]} y mejor t: {best_key[1]}')
+
+    print(metrics(cps, pc_detectados_dataset1, 30, T))
+
+
+
 
 if __name__ == "__main__":
-    casos_base = True
+    casos_base = False
     '''
     Condicional para probar ambos método en casos base (una sola simulación con semilla fija) 
     '''
     if casos_base:
         penal = True
-        heuristic = True
+        heuristic = False
         #SERIE PERIÓDICA
         tran_mat = np.array([[0, 1/3, 5/12, 1/4],
                         [1/5, 0, 2/5, 2/5],
@@ -352,19 +398,18 @@ if __name__ == "__main__":
         n=40
         length = 2000
 
-        lambda_p = 1/(3*np.log(length)*length**0.5)
-        metricas_periodica_emp   = cpd_serie_periodica('Gráficas/Penalización/Dispersión_Periódica_Emp', tran_mat, exp, pc_params, min_w1, n, length, sigma_amp, 
+        #lambda_p = 1/(3*np.log(length)*length**0.5)
+        lambda_p = 1
+        metricas_periodica_emp   = cpd_serie_periodica('Gráficas/Penalización_Normal/Dispersión_Periódica_Emp', tran_mat, exp, pc_params, min_w1, n, length, sigma_amp, 
                                                     sigma_freq, sigma_fase, sigma_pend, sigma_ruido, gauss=False, penal=penal, lambda_p=lambda_p)
-        metricas_periodica_gauss, espacio = cpd_serie_periodica('Gráficas/Penalización/mapa_Periódica_gauss', tran_mat, exp, pc_params, min_w1, n, length, sigma_amp, 
+        metricas_periodica_gauss = cpd_serie_periodica('Gráficas/Penalización_Normal/mapa_Periódica_gauss', tran_mat, exp, pc_params, min_w1, n, length, sigma_amp, 
                                                         sigma_freq, sigma_fase, sigma_pend, sigma_ruido, gauss=True, penal=penal, lambda_p=lambda_p, heuristic=heuristic, max_iter=100, show=True)
             
-        print(f'Función de coste para w: {43} y t: {8} es: {espacio[(43, 8)]}')
-        print(f'Función de coste para w: {12} y t: {1} es: {espacio[(12, 1)]}')
-        print(f'Función de coste para w: {16} y t: {1} es: {espacio[(16, 1)]}')
-        print(f'Función de coste para w: {52} y t: {3} es: {espacio[(52, 3)]}')
+
 
         #SERIE ARIMA 1
         lambda_p = 1/(3*np.log(2000)*2000*0.5)
+        lambda_p = 1
         T1 = 2000
         p1 = 3
         q1 = 2
@@ -389,8 +434,8 @@ if __name__ == "__main__":
                 }
         param_changes = [A, B, A, B, C, A, C, B, C, A, B, C, A, C]
 
-        metricas_arima_gauss = cpd_serie_arma('Gráficas/Penalización/mapa_arma_gauss',T1, changes_arima1, param_changes, p1, q1, penal=penal, gauss=True, lambda_p=lambda_p, heuristic=heuristic)
-        metricas_arima_emp = cpd_serie_arma('Gráficas/Penalización/Dispersión_arma_Emp',T1, changes_arima1, param_changes, p1, q1, penal=penal, gauss=False, lambda_p=lambda_p)
+        metricas_arima_gauss = cpd_serie_arma('Gráficas/Penalización_Normal/mapa_arma_gauss',T1, changes_arima1, param_changes, p1, q1, penal=penal, gauss=True, lambda_p=lambda_p, heuristic=heuristic)
+        metricas_arima_emp = cpd_serie_arma('Gráficas/Penalización_Normal/Dispersión_arma_Emp',T1, changes_arima1, param_changes, p1, q1, penal=penal, gauss=False, lambda_p=lambda_p)
 
             #SERIE AR(6)
         T2 = 2000
@@ -422,8 +467,8 @@ if __name__ == "__main__":
 
         param_changes_2 = [C1, A1, B1, C1, A1, B1, C1, A1, C1, A1, B1, C1, A1, B1, C1, A1]
 
-        metricas_ar6_gauss = cpd_serie_arma('Gráficas/Penalización/mapa_ar6_gauss',T2, changes_2, param_changes_2, p2, q2, penal=penal, gauss=True, lambda_p=lambda_p, heuristic=heuristic)
-        metricas_ar6_emp = cpd_serie_arma('Gráficas/Penalización/Dispersión_ar6_Emp',T2, changes_2, param_changes_2, p2, q2, penal=penal, gauss=False, lambda_p=lambda_p)    
+        metricas_ar6_gauss = cpd_serie_arma('Gráficas/Penalización_Normal/mapa_ar6_gauss',T2, changes_2, param_changes_2, p2, q2, penal=penal, gauss=True, lambda_p=lambda_p, heuristic=heuristic)
+        metricas_ar6_emp = cpd_serie_arma('Gráficas/Penalización_Normal/Dispersión_ar6_Emp',T2, changes_2, param_changes_2, p2, q2, penal=penal, gauss=False, lambda_p=lambda_p)    
 
         #SERIE ARIMA 2
         T3 = 2100
@@ -455,8 +500,8 @@ if __name__ == "__main__":
 
         param_changes_3 = [A2, B2, C2, B2, A2, C2, B2, A2, C2, A2, B2, C2, A2, C2, B2, A2, C2]
 
-        metricas_arima2_gauss = cpd_serie_arma('Gráficas/Penalización/mapa_arima2_gauss',T3, changes_3, param_changes_3, p3, q3, penal=penal, gauss=True, lambda_p=lambda_p, heuristic=heuristic)
-        metricas_arima2_emp = cpd_serie_arma('Gráficas/Penalización/Dispersión_arima_Emp',T3, changes_3, param_changes_3, p3, q3, penal=penal, gauss=False, lambda_p=lambda_p)    
+        metricas_arima2_gauss = cpd_serie_arma('Gráficas/Penalización_Normal/mapa_arima2_gauss',T3, changes_3, param_changes_3, p3, q3, penal=penal, gauss=True, lambda_p=lambda_p, heuristic=heuristic)
+        metricas_arima2_emp = cpd_serie_arma('Gráficas/Penalización_Normal/Dispersión_arima_Emp',T3, changes_3, param_changes_3, p3, q3, penal=penal, gauss=False, lambda_p=lambda_p)    
 
 
         #RESUMEN MÉTRICAS
@@ -497,7 +542,7 @@ if __name__ == "__main__":
             
         df = pd.DataFrame(diccionarios)
         df.insert(0, 'Metodo', nombres)
-        df.to_excel('Tablas_Métricas/Métricas_heurística.xlsx', index=False)
+        df.to_excel('Tablas_Métricas_Cost2/Métricas_heurística.xlsx', index=False)
     
     '''
     Condicional para probar ambos método en experimentos de 200 simulaciones
@@ -550,9 +595,22 @@ if __name__ == "__main__":
     '''
     Condicional para graficar la penalización y la función de coste para diferentes tamaños de la serie de tiempo
     '''
-    casos_orden = False
+    casos_orden = True
     if casos_orden:
         penal = True
+        '''
+        #SERIE ARMA ALEATORIA
+        dataset_random_arma, cps_arma_random, outliers = ar2_noise(T=2000, phi=(0.3, 0.5), theta=(0.0, 0.0), random_phi=True,
+                                                        random_theta=True, min_seg=50, max_seg=150, base_mean=0.5,
+                                                        random_mean=False, mean_range=(-1.0, 1.0), base_std=0.5,
+                                                        random_std=True, std_range=(0.3, 1.2), outlier_interval=200,
+                                                        outlier_scale=6.0, seed=None
+                                                        )
+        print(len(cps_arma_random))
+        best_params_sh(dataset_random_arma, cps_arma_random, path='Gráficas/Heuristic_Slope/ARMA_Random',
+                       name='Random_ARMA', s_thresh=len(cps_arma_random)*np.log(2000)+30, penal=True, lambda_p=0)
+        '''
+
         #SERIE PERIÓDICA
         tran_mat = np.array([[0, 1/3, 5/12, 1/4],
                         [1/5, 0, 2/5, 2/5],
@@ -573,31 +631,27 @@ if __name__ == "__main__":
         sigma_ruido = 0.8
         exp=20
 
-        
-        #Tamaño 2000
         min_w1=30
-        n=400
-        length = 20000
+        n=38
+        length = 2000
+        cps, cambios, clusters_cps = serie_pc(tran_mat, [exp]*len(tran_mat), pc_params, min_w1, n, seed=1234)
 
-        #metricas_periodica100_emp   = cpd_serie_periodica('Gráficas/Orden/Dispersión_Periódica20,000_Emp', tran_mat, exp, pc_params, min_w1, n, length, sigma_amp, 
-        #                                            sigma_freq, sigma_fase, sigma_pend, sigma_ruido, gauss=False, penal=penal, lambda_p=1/(3*np.log(length)*length**0.5))
-        
-        #print(metricas_periodica100_emp)
-        
-        arma_exp(seed=1234, penal=True, path='Gráficas/Orden/ARMA/200', T=200,
-                random_phi=True, random_theta=True, min_seg=30, max_seg=50,  base_mean=0.5, 
-                random_mean=False, base_std=0.5, random_std=True, std_range=(0.3, 1.2))
-        arma_exp(seed=1234, penal=True, path='Gráficas/Orden/ARMA/2,000', T=2000,
-                random_phi=True, random_theta=True, min_seg=30, max_seg=50,  base_mean=0.5, 
-                random_mean=False, base_std=0.5, random_std=True, std_range=(0.3, 1.2))
-        
-        arma_exp(seed=1234, penal=True, path='Gráficas/Orden/ARMA/20,000', T=20000,
-                random_phi=True, random_theta=True, min_seg=30, max_seg=50,  base_mean=0.5, 
-                random_mean=False, base_std=0.5, random_std=True, std_range=(0.3, 1.2))
-        
+        cps_principales = {'S1': [j for j in cps for i in range(len(pc_params[0])) ]}
 
+        cambios_cp = {'S1': cambios}
 
+        amplitud_base, frecuencia_base, fase_base = pc_params[0]
+        pendiente_base = 0
 
+        datos_clustering, subgrupos = generar_series_pc(1, length, 1, 1, amplitud_base, 
+                                                        frecuencia_base, pendiente_base, fase_base, sigma_amp, sigma_freq,
+                                                        sigma_pend, sigma_ruido, cps_principales=cps_principales, cambios_cp=cambios_cp, aleatorio=False)
+        
+        serie_ruido = datos_clustering[0]
+        T_ruido = len(serie_ruido)
+
+        best_params_sh(serie_ruido, cps, path='Gráficas/Heuristic_Slope/Periódica',
+                       name='serie_periodica', s_thresh=len(cps)+10, penal=True, lambda_p=0)
 
     #data = np.load("metricas_opt.npz")
 

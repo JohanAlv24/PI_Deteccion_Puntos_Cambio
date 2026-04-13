@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from scipy.linalg import fractional_matrix_power, logm
 from numpy.lib.stride_tricks import sliding_window_view
@@ -116,31 +117,29 @@ class CPD():
     tr(S1 + S2 - 2 * (S1^{1/2} S2 S1^{1/2})^{1/2})
     '''
     def traces(self, S1, S2, eps=1e-12):
-        
+    
         S1 = 0.5 * (S1 + S1.transpose(0,2,1))
         S2 = 0.5 * (S2 + S2.transpose(0,2,1))
-    
-        w1, v1 = np.linalg.eigh(S1)         
-        w1_clipped = np.clip(w1, a_min=eps, a_max=None)   
-        sqrt_w1 = np.sqrt(w1_clipped)    
-    
 
+        w1, v1 = np.linalg.eigh(S1)
+        w1 = np.clip(w1, 0, None) 
+        sqrt_w1 = np.sqrt(w1)
         sqrt1 = (v1 * sqrt_w1[..., None, :]) @ v1.transpose(0,2,1)
-    
-        middle = sqrt1 @ S2 @ sqrt1
-        middle = 0.5 * (middle + middle.transpose(0,2,1)) 
-    
-        wm, vm = np.linalg.eigh(middle)
-        wm_clipped = np.clip(wm, a_min=eps, a_max=None)
-        sqrt_wm = np.sqrt(wm_clipped)
-        sqrt_middle = (vm * sqrt_wm[..., None, :]) @ vm.transpose(0,2,1)
-    
- 
-        diff = S1 + S2 - 2.0 * sqrt_middle
-        traces = np.einsum('nii->n', diff) 
-    
-        return traces
 
+        middle = sqrt1 @ S2 @ sqrt1
+        middle = 0.5 * (middle + middle.transpose(0,2,1))
+
+        wm, vm = np.linalg.eigh(middle)
+        wm = np.clip(wm, 0, None) 
+        sqrt_wm = np.sqrt(wm)
+        sqrt_middle = (vm * sqrt_wm[..., None, :]) @ vm.transpose(0,2,1)
+
+        diff = S1 + S2 - 2.0 * sqrt_middle
+        traces = np.einsum('nii->n', diff)
+
+        traces = np.clip(traces, 0, None)
+
+        return traces
 
     #Tangent() hace la proyección de las matrices de covarianza al plano tangente. Este método se usa para la etapa de clusterización
     def tangent(self, cov=None):
@@ -204,7 +203,9 @@ class CPD():
         entropy_term = F_hat * np.log(F_hat) + (1 - F_hat) * np.log(1 - F_hat)
 
         return -n * np.sum(entropy_term * weights)
-
+    
+  
+    
     '''
     La función total_cost recibe la lista de puntos de cambio (change_poins) y aplica la función de coste a cada segmento
     para hallar la función de coste total. En esta función también se añade retorna el factor de penalización pero es integrado 
@@ -224,8 +225,7 @@ class CPD():
         if penal:
             T = len(self.Serie)
             #beta = np.log(T)**(2.1)/2
-            beta = 3*np.log(T)
-            penalty = 0.5*(beta * (len(change_points)) + np.sum(np.log(np.diff(change_points/T))))
+            penalty = len(change_points)
             return total, penalty
         return total
     '''
@@ -236,7 +236,7 @@ class CPD():
     para llevarlo al mismo orden del coste (1/(log(T)*T))
     '''
     def opt_window_t(self, min_w = None,
-                     max_w = None, penal = False, lambda_p = -1):
+                     max_w = None, penal = False, lambda_p = -1, join = True):
 
         T = len(self.Serie)
         if lambda_p == -1:
@@ -271,7 +271,8 @@ class CPD():
         best_cp = None
         best_dist = None
         
-        espacio = {}
+        if join:
+            espacio = {}
         f_costos = {}
         penalizaciones = {}
 
@@ -289,7 +290,8 @@ class CPD():
                 else:
                     cost, w, t, cps, distancias = result
 
-                espacio[(w, t)] = cost
+                if join:
+                    espacio[(w, t)] = cost
                 #print(f"w={w}, t={t}, cost={cost}")
                 if cost < best_cost:
                     best_cost = cost
@@ -302,7 +304,9 @@ class CPD():
             #Se acota la desviación estándar del filtro gaussiano en 12 para evitar suavizar en exceso la curva de distancias con grandes tamaños de ventana
             self.sigma_filter = min(math.ceil(math.sqrt(self.window)), 12)
         if penal:
-            return best_dist, best_cp, espacio, f_costos, penalizaciones
+            if join:
+                return best_dist, best_cp, espacio, f_costos, penalizaciones
+            return best_dist, best_cp, f_costos, penalizaciones
      
         return best_dist, best_cp, espacio
     
@@ -311,6 +315,60 @@ class CPD():
     Los parámetros cumplen la misma función añadiendo la máxima cantidad de iteraciones por búsqueda del
     metaheurístico.
     '''
+
+    def slope_heuristic_fig(self, costs, penals, plot=True, path='slope_heuristic'):
+    
+        penal_to_costs = {}
+        
+        for key in costs:
+            penal = penals[key]
+            cost = costs[key]
+            
+            if penal not in penal_to_costs:
+                penal_to_costs[penal] = []
+            
+            penal_to_costs[penal].append(cost)
+        
+        penal_min_cost = {
+            penal: min(cost_list)
+            for penal, cost_list in penal_to_costs.items()
+        }
+        
+        result = sorted(penal_min_cost.items(), key=lambda x: x[0])
+        
+        penals_sorted = [x[0] for x in result]
+        min_costs = [x[1] for x in result]
+        
+        if plot:
+            plt.figure()
+            plt.plot(penals_sorted, min_costs, marker='o')
+            plt.xlabel("Penalización")
+            plt.ylabel("Costo mínimo")
+            plt.title("Slope Heuristic")
+            plt.grid(True)
+            plt.tight_layout()
+            plt.savefig(path, dpi=300, bbox_inches="tight")
+            plt.show()
+        
+        return penals_sorted, min_costs
+    
+    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic'):
+        penals_sorted, min_costs = self.slope_heuristic_fig(costs, penals, plot, path)
+        penals_arr = np.array(penals_sorted)
+        costs_arr = np.array(min_costs)
+        
+        mask = penals_arr >= s_thresh
+        penals_filtered = penals_arr[mask]
+        costs_filtered = costs_arr[mask]
+        
+        if len(penals_filtered) < 2:
+            raise ValueError("No hay suficientes puntos para hacer regresión después del umbral.")
+        
+        m, b = np.polyfit(penals_filtered, costs_filtered, 1)
+        
+        return abs(m)
+        
+
     def heuristic_window_t(self, min_w=None, max_w=None, penal=False, lambda_p=-1, max_iter=50):
 
         T = len(self.Serie)
