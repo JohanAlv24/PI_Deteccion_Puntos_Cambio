@@ -3,6 +3,8 @@ from Algoritmo_Gaussiano.cpd import CPD
 from Algoritmo_Empiricas.Empirical_CPD import EmpiricalCPD
 from Utils.detection import detect
 from Utils.metrics_sup import metrics
+from Utils.tools import best_params_sh
+
 from Series_Prueba.periodical_data import generar_series_pc, serie_pc
 
 
@@ -116,34 +118,36 @@ def ar2_noise(
     return x, sorted(cps), outlier_idx
 
 
-def samples_200_arma(seed, penal, lambda_p, N=200, window=30, t=0, m=0, f_gauss=6, thr_dist=30,
+def samples_200_arma(seed, N=200, thr_dist=30,
                     T=2000, phi=(0.3, 0.5), theta=(0.0, 0.0), random_phi=False,
                     random_theta=False, min_seg=50, max_seg=150, base_mean=0.0,
                     random_mean=True, mean_range=(-1.0, 1.0), base_std=0.5, 
                     random_std=True, std_range=(0.2, 1.2), outlier_interval=200,
-                    outlier_scale=6.0, seed2=None):
-    
+                    outlier_scale=6.0, s_thresh=0, seed2=None, plot_cond=False, tail=False, tail_list=[], given=True, plot_slope=False):
+    if len(tail_list)==0:
+        tail_list = [N]
     np.random.seed(seed)
     metricas_gauss = []
     metricas_emp = []
     for i in range(N):
         print(i)
-        dataset1, cps_ar2, outliers_ar2 = ar2_noise(T, phi, theta, random_phi,
+        dataset1, cps_ar, outliers_ar = ar2_noise(T, phi, theta, random_phi,
                                                         random_theta, min_seg, max_seg, base_mean,
                                                         random_mean, mean_range, base_std,
                                                         random_std, std_range, outlier_interval,
                                                         outlier_scale, seed2
                                                     )
-        T = len(dataset1)
-        PC_dataset1 = CPD(dataset1, window, t, m, True, f_gauss, True)
-        distancias, pc_detectados_dataset1, espacio =  PC_dataset1.opt_window_t(max_w=T//10, penal=penal, lambda_p=lambda_p)
-        met_dataset1, values_dataset1 = metrics(cps_ar2, pc_detectados_dataset1, thr_dist, T)
-        metricas_gauss.append(list(met_dataset1.values()))
+        if not tail or i+1 in tail_list:
+            met_dataset1_gauss = best_params_sh(dataset1, cps_ar, s_thresh=s_thresh, penal=True, lambda_p=0, plot_cond=plot_cond, given=given, plot_slope=plot_slope)
+            met_dataset1_emp = best_params_sh(dataset1, cps_ar, s_thresh=s_thresh, penal=True, lambda_p=0, plot_cond=plot_cond, gauss=False, given=given, plot_slope=plot_slope)
 
-        PC_dataset1_emp = EmpiricalCPD(dataset1)
-        best_dist, pc_detectados_dataset1_emp, espacio = PC_dataset1_emp.opt_window(max_w=T//10, penal=penal, lambda_p=lambda_p)
-        met_dataset1_emp, values_dataset1_emp = metrics(cps_ar2, pc_detectados_dataset1_emp, thr_dist, T)
-        metricas_emp.append(list(met_dataset1_emp.values()))
+            print('Gaussiana')
+            print(met_dataset1_gauss)
+            print()
+            print('Empírica')
+            print(met_dataset1_emp)
+            metricas_gauss.append(list(met_dataset1_gauss[0].values()))
+            metricas_emp.append(list(met_dataset1_emp[0].values()))
         
     return metricas_gauss, metricas_emp
 

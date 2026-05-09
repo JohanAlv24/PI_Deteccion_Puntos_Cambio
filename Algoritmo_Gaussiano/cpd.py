@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 from scipy.linalg import fractional_matrix_power, logm
@@ -7,6 +8,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 import multiprocessing as mp
 from scipy.stats import norm
 from Algoritmo_Gaussiano.workers import init_worker, evaluate_params_worker, local_search_sa_worker
+
 
 class CPD():
     '''
@@ -226,6 +228,7 @@ class CPD():
             T = len(self.Serie)
             #beta = np.log(T)**(2.1)/2
             penalty = len(change_points)
+
             return total, penalty
         return total
     '''
@@ -352,19 +355,14 @@ class CPD():
         
         return penals_sorted, min_costs
     
-    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic'):
+    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic', given=True):
+        from Utils.tools import hallar_pendiente
         penals_sorted, min_costs = self.slope_heuristic_fig(costs, penals, plot, path)
         penals_arr = np.array(penals_sorted)
         costs_arr = np.array(min_costs)
         
-        mask = penals_arr >= s_thresh
-        penals_filtered = penals_arr[mask]
-        costs_filtered = costs_arr[mask]
         
-        if len(penals_filtered) < 2:
-            raise ValueError("No hay suficientes puntos para hacer regresión después del umbral.")
-        
-        m, b = np.polyfit(penals_filtered, costs_filtered, 1)
+        m = hallar_pendiente(penals_arr, costs_arr, s_thresh, given)
         
         return abs(m)
         

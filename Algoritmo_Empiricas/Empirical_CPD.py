@@ -1,5 +1,7 @@
 import numpy as np
 import math
+import seaborn as sns
+import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 import multiprocessing as mp
 from Algoritmo_Empiricas.workers_empirical import init_worker_empirical, evaluate_window_worker
@@ -107,15 +109,6 @@ class EmpiricalCPD():
     en el proceso de optimización
     '''
 
-    def cost_mean(self, start, end):
-        segment = self.Serie[start:end]
-
-        n = len(segment)
-        mean = np.mean(self.Serie)
-        segment_mean = np.mean(segment)
-        return n*((segment_mean-mean)**2)
-    
-
     def total_cost(self, change_points, penal=True):
 
         sorted_unique, weights = self.mle()
@@ -123,25 +116,15 @@ class EmpiricalCPD():
         total = 0.0
 
         for i in range(len(change_points) - 1):
-            '''
             total += self.segment_cost_mle(
                 change_points[i],
                 change_points[i + 1],
                 sorted_unique,
                 weights
-            )'''
-            total += self.cost_mean(
-                change_points[i],
-                change_points[i + 1])
-
+            )
         if penal:
 
-            T = len(self.Serie)
-
-            #beta = np.log(T)**(2.1)/2
-            beta = 3*np.log(T)
-            penalty = 0.5*((beta * (len(change_points)) + np.sum(np.log(np.diff(change_points/T)))))
-
+            penalty = (len(change_points))
             
             return total, penalty
 
@@ -157,10 +140,10 @@ class EmpiricalCPD():
                    min_w=None,
                    max_w=None,
                    penal=False,
-                   lambda_p=-1):
+                   lambda_p=0,
+                   join=True):
         T = len(self.Serie)
-        if lambda_p == -1:
-            lambda_p = 1/(3*np.log(T)*T**0.5)
+            #lambda_p = 1/(3*np.log(T)*T**0.5)
 
         if not min_w:
             min_w = 9
@@ -188,8 +171,8 @@ class EmpiricalCPD():
         best_window = None
         best_cp = None
         best_dist = None
-
-        espacio = {}
+        if join:
+            espacio = {}
         f_costos = {}
         penalizaciones = {}
 
@@ -213,8 +196,8 @@ class EmpiricalCPD():
                     cost = total + lambda_p * penalty
                 else:
                     cost, w, cps, distancias = result
-
-                espacio[w] = cost
+                if join:
+                    espacio[w] = cost
 
                 #print(f"w={w}, cost={cost}")
 
@@ -234,5 +217,54 @@ class EmpiricalCPD():
                 12
             )
         if penal:
-            return best_dist, best_cp, espacio, f_costos, penalizaciones
+            if join:
+                return best_dist, best_cp, espacio, f_costos, penalizaciones
+            return best_dist, best_cp, f_costos, penalizaciones
         return best_dist, best_cp, espacio
+    
+
+    def slope_heuristic_fig(self, costs, penals, plot=True, path='slope_heuristic'):
+    
+        penal_to_costs = {}
+        
+        for key in costs:
+            penal = penals[key]
+            cost = costs[key]
+            
+            if penal not in penal_to_costs:
+                penal_to_costs[penal] = []
+            
+            penal_to_costs[penal].append(cost)
+        
+        penal_min_cost = {
+            penal: min(cost_list)
+            for penal, cost_list in penal_to_costs.items()
+        }
+        
+        result = sorted(penal_min_cost.items(), key=lambda x: x[0])
+        
+        penals_sorted = [x[0] for x in result]
+        min_costs = [x[1] for x in result]
+        
+        if plot:
+            plt.figure()
+            plt.plot(penals_sorted, min_costs, marker='o')
+            plt.xlabel("Penalización")
+            plt.ylabel("Costo mínimo")
+            plt.title("Slope Heuristic")
+            plt.grid(True)
+            plt.tight_layout()
+            plt.savefig(path, dpi=300, bbox_inches="tight")
+            plt.show()
+        
+        return penals_sorted, min_costs
+    
+    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic', given=True):
+        from Utils.tools import hallar_pendiente
+        penals_sorted, min_costs = self.slope_heuristic_fig(costs, penals, plot, path)
+        penals_arr = np.array(penals_sorted)
+        costs_arr = np.array(min_costs)    
+        
+        m = hallar_pendiente(penals_arr, costs_arr, s_thresh, given)
+        
+        return abs(m)
