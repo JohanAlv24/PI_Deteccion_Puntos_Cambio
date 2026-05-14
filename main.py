@@ -6,6 +6,7 @@ from Series_Prueba.ARIMA import arima_serie
 from Utils.detection import detect
 from Utils.metrics_sup import metrics
 from Series_Prueba.experimentos import samples_200_arma, samples_200_sin, ar2_noise
+from matplotlib.ticker import MultipleLocator
 
 import time
 import pandas as pd
@@ -36,7 +37,7 @@ def boxplot_comp(M1, M2, columnas, title, path, usar_violin=False):
             }))
         return pd.concat(df_list, ignore_index=True)
 
-    def graficar(df, filename_suffix):
+    def graficar(df, filename_suffix, y_step):
         plt.figure(figsize=(10, 6))
 
         if usar_violin:
@@ -45,11 +46,9 @@ def boxplot_comp(M1, M2, columnas, title, path, usar_violin=False):
                 split=True, inner="box", palette="pastel"
             )
         else:
-            palette = "pastel"
-
             sns.boxplot(
                 data=df, x="Columna", y="Valor", hue="Matriz",
-                palette=palette, width=0.5
+                palette="pastel", width=0.5
             )
 
             sns.stripplot(
@@ -61,7 +60,10 @@ def boxplot_comp(M1, M2, columnas, title, path, usar_violin=False):
             handles, labels = plt.gca().get_legend_handles_labels()
             plt.legend(handles[:2], labels[:2], title="Matriz")
 
-        plt.title(title) 
+        ax = plt.gca()
+        ax.yaxis.set_major_locator(MultipleLocator(y_step))
+
+        plt.title(title)
         plt.tight_layout()
         plt.savefig(path + filename_suffix, dpi=300, bbox_inches="tight")
         plt.show()
@@ -69,12 +71,12 @@ def boxplot_comp(M1, M2, columnas, title, path, usar_violin=False):
     idx1 = list(range(1, 4))
     cols1 = columnas[1:4]
     df1 = construir_df(idx1, cols1)
-    graficar(df1, ' 1')  
+    graficar(df1, ' 1', y_step=0.05)
 
     idx2 = [0]
     cols2 = [columnas[0]]
     df2 = construir_df(idx2, cols2)
-    graficar(df2, ' 2')  
+    graficar(df2, ' 2', y_step=1)
 '''
 Función para probar los métodos de optimización en una serie de tiempo ARMA aleatoria (los puntos de cambio son aleatorios). 
 Solo se utiliza el método de empíricas pues la idea de esta función es observar el comportamiento de la función de coste y la penalización
@@ -117,44 +119,26 @@ def arma_exp(seed, penal, path, window=30, t=0, m=0, f_gauss=6,
 
 
 if __name__ == "__main__":
-    
     '''
     print("EXPERIMENTO AR(2) CON MEDIA Y DISPERSIÓN FLUCTUANTES")
-    met_gauss_ar2_1, met_emp_ar2_1 = samples_200_arma(seed=1234, N=10, thr_dist=30, min_seg=80, max_seg=120,
-                                                        base_mean=0.3, std_range=(0.3, 1.2), s_thresh=22, seed2=None, plot_cond=False, tail=False, given=False, plot_slope=True)
+    met_gauss_ar2_1, met_emp_ar2_1 = samples_200_arma(seed=1234, N=200, thr_dist=30, min_seg=80, max_seg=120,
+                                                        base_mean=0.3, std_range=(0.3, 1.2), s_thresh=22, seed2=None, plot_cond=False, tail=False, given=False, plot_slope=False)
     print('Gaussiana')
     print(met_gauss_ar2_1)
     print('Empírica')
     print(met_emp_ar2_1)
     print()
-
-
-
-    np.savez(
-                "metricas_opt20.npz",
-                M1=met_gauss_ar2_1,
-                M2=met_emp_ar2_1,
-            )
-    
-    data = np.load("metricas_opt20.npz")
-    
-    M1_opt = data["M1"]
-    M2_opt = data["M2"]
-  
-    columnas = ['Mean Location Error', 'Precision', 'Recall', 'F1 Score', 'Accuracy', 'Falsos Positivos', 'Falsos Negativos', 'Verdaderos Positivos']
-    
-
-    boxplot_comp(met_gauss_ar2_1, met_emp_ar2_1, columnas, "Comparación métricas AR variando media y dispersión", 'Gráficas/Umbral Variable/Comparación_AR_Media_20_Pruebas', usar_violin=True)
-    
-    #plt.plot(prec_list - M1_opt[1])
-
     '''
+    data_ar2 = pd.read_excel("metricas_opt2_Codo.xlsx", sheet_name="M3")
+    f1_ar2 = data_ar2[data_ar2['F1 Score']<0.65]['F1 Score']
+    tail_list = (f1_ar2.index + 1).tolist()
+    
     print("EXPERIMENTO AR(2) CON REZAGOS FLUCTUANTES")
-    met_gauss_ar2_2, met_emp_ar2_2 = samples_200_arma(seed=1234, N=15, thr_dist=30,
+    met_gauss_ar2_2, met_emp_ar2_2 = samples_200_arma(seed=1234, N=200, thr_dist=30,
                                                         random_phi=True, min_seg=80, max_seg=120,  base_mean=0.5, 
-                                                        random_mean=False, base_std=0.5, random_std=True, s_thresh=40, std_range=(0.3, 1.2), given=False, plot_slope=True)
+                                                        random_mean=False, base_std=0.5, random_std=True, s_thresh=40, std_range=(0.3, 1.2), given=False, geom=False, plot_slope=True, tail=True, tail_list=tail_list)
     
-    '''
+  
     print('Gaussiana')
     print(met_gauss_ar2_2)
     print('Empírica')
@@ -162,23 +146,25 @@ if __name__ == "__main__":
     print()
 
     
+    '''
     np.savez(
-                "metricas_opt2.npz",
+                "metricas_opt2_Codo.npz",
                 M1=met_gauss_ar2_1,
                 M2=met_emp_ar2_1,
                 M3=met_gauss_ar2_2,
                 M4=met_emp_ar2_2
             )
+  
     
-    data = np.load("metricas_opt2.npz")
+    data = np.load("metricas_opt2_Codo.npz")
 
     M1_opt = data["M1"]
     M2_opt = data["M2"]
     M3_opt = data["M3"]
     M4_opt = data["M4"]
-
     columnas = ['Mean Location Error', 'Precision', 'Recall', 'F1 Score', 'Accuracy', 'Falsos Positivos', 'Falsos Negativos', 'Verdaderos Positivos']
    
+
     ids = ["Gauss", "Empírico"]
 
     fila1 = [ids[0]] + list(np.mean(np.array(M1_opt), axis=0))
@@ -191,17 +177,10 @@ if __name__ == "__main__":
 
     df_ar2_2 = pd.DataFrame([fila1, fila2], columns=['Método']+columnas)
     
-    df_ar2_1.to_excel("Métricas_Experimento_AR2_1_Variable.xlsx", index=False)
-    df_ar2_2.to_excel("Métricas_Experimento_AR2_2_Variable.xlsx", index=False)
+    #df_ar2_1.to_excel("Métricas_Experimento_AR2_1_Codo.xlsx", index=False)
+    #df_ar2_2.to_excel("Métricas_Experimento_AR2_2_Codo.xlsx", index=False)
        
-
-    columnas = ['Mean Location Error', 'Precision', 'Recall', 'F1 Score', 'Accuracy', 'Falsos Positivos', 'Falsos Negativos', 'Verdaderos Positivos']
-    data = np.load("metricas_opt2.npz")
-
-    M1_opt = data["M1"]
-    M2_opt = data["M2"]
-    M3_opt = data["M3"]
-    M4_opt = data["M4"]
+    
     #M5_opt = data["M5"]
     #M6_opt = data["M6"]
     #M7_opt = data["M7"]
@@ -210,17 +189,16 @@ if __name__ == "__main__":
     df2 = pd.DataFrame(M2_opt, columns=columnas)
     df3 = pd.DataFrame(M3_opt, columns=columnas)
     df4 = pd.DataFrame(M4_opt, columns=columnas)
-
+    '''
     # Exportar a un solo archivo Excel con múltiples hojas
-    with pd.ExcelWriter("metricas_opt2_Ajustado.xlsx") as writer:
+    '''with pd.ExcelWriter("metricas_opt2_Codo.xlsx") as writer:
         df1.to_excel(writer, sheet_name="M1", index=False)
         df2.to_excel(writer, sheet_name="M2", index=False)
         df3.to_excel(writer, sheet_name="M3", index=False)
-        df4.to_excel(writer, sheet_name="M4", index=False)
-    '''
-    
-    #boxplot_comp(M1_opt, M2_opt, columnas, "Comparación métricas AR variando media y dispersión", 'Gráficas/Umbral Variable/Comparación_AR_Media')
-    #boxplot_comp(M3_opt, M4_opt, columnas, "Comparación métricas AR variando rezagos", 'Gráficas/Umbral Variable/Comparación_AR_Rezagos')
+        df4.to_excel(writer, sheet_name="M4", index=False)'''
+
+    #boxplot_comp(M1_opt, M2_opt, columnas, "Comparación métricas AR variando media y dispersión", 'Gráficas/Umbral Variable/Comparación_AR_Media', usar_violin=True)
+    #boxplot_comp(M3_opt, M4_opt, columnas, "Comparación métricas AR variando rezagos", 'Gráficas/Umbral Variable/Comparación_AR_Rezagos', usar_violin=True)
 
 
     #boxplot_comp(M5_opt, M6_opt, columnas, "Comparación métricas ARMA")

@@ -259,12 +259,12 @@ class EmpiricalCPD():
         
         return penals_sorted, min_costs
     
-    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic', given=True):
+    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic', given=True, geom=True):
         from Utils.tools import hallar_pendiente
         penals_sorted, min_costs = self.slope_heuristic_fig(costs, penals, plot, path)
         penals_arr = np.array(penals_sorted)
         costs_arr = np.array(min_costs)    
         
-        m = hallar_pendiente(penals_arr, costs_arr, s_thresh, given)
+        m = hallar_pendiente(penals_arr, costs_arr, s_thresh, given, geom)
         
         return abs(m)

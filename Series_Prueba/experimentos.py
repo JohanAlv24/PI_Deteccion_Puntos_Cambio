@@ -123,7 +123,7 @@ def samples_200_arma(seed, N=200, thr_dist=30,
                     random_theta=False, min_seg=50, max_seg=150, base_mean=0.0,
                     random_mean=True, mean_range=(-1.0, 1.0), base_std=0.5, 
                     random_std=True, std_range=(0.2, 1.2), outlier_interval=200,
-                    outlier_scale=6.0, s_thresh=0, seed2=None, plot_cond=False, tail=False, tail_list=[], given=True, plot_slope=False):
+                    outlier_scale=6.0, s_thresh=0, seed2=None, plot_cond=False, tail=False, tail_list=[], given=True, plot_slope=False, geom=True):
     if len(tail_list)==0:
         tail_list = [N]
     np.random.seed(seed)
@@ -138,14 +138,14 @@ def samples_200_arma(seed, N=200, thr_dist=30,
                                                         outlier_scale, seed2
                                                     )
         if not tail or i+1 in tail_list:
-            met_dataset1_gauss = best_params_sh(dataset1, cps_ar, s_thresh=s_thresh, penal=True, lambda_p=0, plot_cond=plot_cond, given=given, plot_slope=plot_slope)
-            met_dataset1_emp = best_params_sh(dataset1, cps_ar, s_thresh=s_thresh, penal=True, lambda_p=0, plot_cond=plot_cond, gauss=False, given=given, plot_slope=plot_slope)
-
+            met_dataset1_gauss = best_params_sh(dataset1, cps_ar, s_thresh=s_thresh, penal=True, lambda_p=0, plot_cond=plot_cond, given=given, plot_slope=plot_slope, geom=geom)
+            met_dataset1_emp = best_params_sh(dataset1, cps_ar, s_thresh=s_thresh, penal=True, lambda_p=0, plot_cond=plot_cond, gauss=False, given=given, plot_slope=plot_slope, geom=geom)
+            
             print('Gaussiana')
             print(met_dataset1_gauss)
-            print()
             print('Empírica')
             print(met_dataset1_emp)
+            
             metricas_gauss.append(list(met_dataset1_gauss[0].values()))
             metricas_emp.append(list(met_dataset1_emp[0].values()))
         

@@ -87,7 +87,7 @@ def penalized_costs(costs, penals, beta):
     return best_key, result
 
 
-def best_params_sh(dataset, cps, path='', name='', s_thresh=0, penal=True, lambda_p=0, plot_cond=True, gauss=True, given=True, plot_slope=False):
+def best_params_sh(dataset, cps, path='', name='', s_thresh=0, penal=True, lambda_p=0, plot_cond=True, gauss=True, given=True, plot_slope=False, geom=True):
     if not gauss:
         CPD_dataset1 = EmpiricalCPD(dataset)
         T = len(dataset)
@@ -102,7 +102,7 @@ def best_params_sh(dataset, cps, path='', name='', s_thresh=0, penal=True, lambd
             graficar_dispersion_costo(start, end, CPD_dataset1, f_costos, "Dispersión solo costo "+str(T), path+' empírica solo coste '+name, object_use=False)
             graficar_dispersion_costo(start, end, CPD_dataset1, penalizaciones, "Dispersión penalización "+str(T), path+' empírica solo penalización '+name, object_use=False)
 
-        betha = CPD_dataset1.slope_heuristic_regression(s_thresh, f_costos, penalizaciones, plot=plot_slope, path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope '+name, given=given)
+        betha = CPD_dataset1.slope_heuristic_regression(s_thresh, f_costos, penalizaciones, plot=plot_slope, path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope '+name, given=given, geom=geom)
 
         best_key, result = penalized_costs(f_costos, penalizaciones, 2*betha)
 
@@ -127,7 +127,7 @@ def best_params_sh(dataset, cps, path='', name='', s_thresh=0, penal=True, lambd
             graficar_mapa_calor(start, end, CPD_dataset1, f_costos, "Mapa de calor solo costo "+str(T), path+' gaussiana solo coste '+name)
             graficar_mapa_calor(start, end, CPD_dataset1, penalizaciones, "Mapa de calor penalización "+str(T), path+' gaussiana solo penalización '+name)
 
-        betha = CPD_dataset1.slope_heuristic_regression(s_thresh, f_costos, penalizaciones, plot=plot_slope, path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope '+name, given=given)
+        betha = CPD_dataset1.slope_heuristic_regression(s_thresh, f_costos, penalizaciones, plot=plot_slope, path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope '+name, given=given, geom=geom)
 
         best_key, result = penalized_costs(f_costos, penalizaciones, 2*betha)
 
@@ -146,7 +146,6 @@ def best_params_sh(dataset, cps, path='', name='', s_thresh=0, penal=True, lambd
 
 
 def detectar_codo(x, y):
-    # Normalizar (importante para estabilidad numérica)
     x = (x - x.min()) / (x.max() - x.min())
     y = (y - y.min()) / (y.max() - y.min())
 
@@ -163,7 +162,7 @@ def detectar_codo(x, y):
     return idx_codo
 
 
-def hallar_pendiente(penals_arr, costs_arr, s_thresh=None, given=True):
+def hallar_pendiente(penals_arr, costs_arr, s_thresh=None, given=True, geom=True):
     x = np.asarray(penals_arr)
     y = np.asarray(costs_arr)
 
@@ -174,9 +173,30 @@ def hallar_pendiente(penals_arr, costs_arr, s_thresh=None, given=True):
     if given:
         thresh = s_thresh
     else:
-        idx_codo = detectar_codo(x, y)
-        thresh = x[idx_codo]
-        print(f'CODO: {thresh}')
+        if geom:
+            y_smooth = suavizar_media_movil(y)
+            '''
+            plt.figure(figsize=(8,5))
+
+            plt.plot(x, y, label='Original', alpha=0.6)
+            plt.plot(x, y_smooth, linewidth=2, label='Suavizada')
+
+            plt.xlabel("Penalización")
+            plt.ylabel("Costo")
+            plt.title("Curva original vs suavizada")
+
+            plt.legend()
+            plt.grid(True)
+
+            plt.show()
+            '''
+            
+            idx_codo = detectar_codo(x, y_smooth)
+            thresh = x[idx_codo]
+            #print(f'CODO: {thresh}')
+        else:
+            idx_codo = detectar_codo_por_estabilizacion(x, y)
+            thresh = x[idx_codo]
 
     # Filtrar
     mask = x >= thresh
@@ -189,6 +209,108 @@ def hallar_pendiente(penals_arr, costs_arr, s_thresh=None, given=True):
     m, _ = np.polyfit(x_filtrado, y_filtrado, 1)
     return abs(m)
 
+
+def suavizar_media_movil(y, window=5, preserve_edges=3):
+    kernel = np.ones(window) / window
+
+    # Suavizado eficiente
+    y_smooth = np.convolve(y, kernel, mode='same')
+
+    # Restaurar extremos originales
+    y_smooth[:preserve_edges] = y[:preserve_edges]
+    y_smooth[-preserve_edges:] = y[-preserve_edges:]
+
+    return y_smooth
+
+
+
+def detectar_codo_por_estabilizacion(
+    x,
+    y,
+    q=0.10,
+    min_points=5,
+    usar_valor_absoluto=True
+):
+
+
+
+    idx = np.argsort(x)
+    x = x[idx]
+    y = y[idx]
+
+    pendientes = []
+    x_reg = []
+
+
+
+    for i in range(len(x) - min_points):
+
+        x_sub = x[i:]
+        y_sub = y[i:]
+
+        m, _ = np.polyfit(x_sub, y_sub, 1)
+
+        if usar_valor_absoluto:
+            m = abs(m)
+
+        pendientes.append(m)
+        x_reg.append(x[i])
+
+    pendientes = np.array(pendientes)
+    x_reg = np.array(x_reg)
+
+
+    m_min = pendientes.min()
+    m_max = pendientes.max()
+
+    banda_sup = m_min + q * (m_max - m_min)
+
+    idx_codo = np.argmax(pendientes <= banda_sup)
+
+    x_codo = x_reg[idx_codo]
+    pendiente_codo = pendientes[idx_codo]
+
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    ax.plot(
+        x_reg,
+        pendientes,
+        marker='o',
+        label='Pendientes iterativas'
+    )
+
+    ax.axhline(
+        banda_sup,
+        linestyle='--',
+        label=f'Banda q={q}'
+    )
+
+    ax.axvline(
+        x_codo,
+        linestyle=':',
+        linewidth=2,
+        label=f'Codo detectado = {x_codo:.2f}'
+    )
+
+    ax.scatter(
+        x_codo,
+        pendiente_codo,
+        s=100,
+        zorder=5
+    )
+
+    ax.set_xlabel("Penalización inicial de regresión")
+    ax.set_ylabel("Pendiente absoluta")
+
+    ax.set_title("Estabilización de pendientes")
+
+    ax.grid(True)
+    ax.legend()
+
+    plt.show()
+
+    return idx_codo
 '''
 
 def fit_spline(x, y, s=None, plot=False, num_points=500):
