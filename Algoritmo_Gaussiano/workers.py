@@ -24,8 +24,7 @@ def evaluate_params_worker(args):
         t=int(t),
         m=class_defaults.get("m", 3),
         medias=class_defaults.get("medias", True),
-        sigma=class_defaults.get("sigma_filter", 2),
-        k_gauss=class_defaults.get("k_gauss", True),
+        smooth=class_defaults.get("smooth", True),
         n_perm=class_defaults.get("n_perm", 0),
     )
 
@@ -76,8 +75,7 @@ def local_search_sa_worker(args):
             t=int(t),
             m=class_defaults.get("m", 3),
             medias=class_defaults.get("medias", True),
-            sigma=class_defaults.get("sigma_filter", 2),
-            k_gauss=class_defaults.get("k_gauss", True),
+            smooth=class_defaults.get("smooth", True),
         )
 
         distancias = obj.distancias()

@@ -2,9 +2,9 @@ import numpy as np
 import math
 import seaborn as sns
 import matplotlib.pyplot as plt
-from scipy.ndimage import gaussian_filter1d
 from scipy.linalg import fractional_matrix_power, logm
 from numpy.lib.stride_tricks import sliding_window_view
+from csaps import csaps
 import multiprocessing as mp
 from scipy.stats import norm
 from Algoritmo_Gaussiano.workers import init_worker, evaluate_params_worker, local_search_sa_worker
@@ -17,20 +17,18 @@ class CPD():
     t: Retardo para aplicar el teorema de Takens
     m: Dimensión de los embeddings para aplicar el teorema de Takens
     medias: Condicional para usar la media en la distancia de Wasserstein
-    sigma: Valor del parámetro del filtro gaussiano
-    k_gauss: Condicional para aplicar filtro gaussiano a la curva de distancias de Wasserstein
+    smooth: Condicional para aplicar filtro gaussiano a la curva de distancias de Wasserstein
     n_perm: Parámetro en desuso para la prueba de permutación
     '''
     def __init__(self, X, window = 0, t = 0, m = 3,
-                 medias = True, sigma = 2, k_gauss = True, n_perm = 0):
+                 medias = True, smooth = True, n_perm = 0):
         
         self.Serie = np.asarray(X, dtype=np.float64)
         self.window = int(window)
         self.t = int(t)
         self.m = int(m)
         self.medias = bool(medias)
-        self.sigma_filter = int(sigma)
-        self.k_gauss = bool(k_gauss)
+        self.smooth = bool(smooth)
         self.n_perm = int(n_perm)
 
         self.vec_med = None
@@ -38,6 +36,9 @@ class CPD():
         self.embeddings_list = []
         self._sorted_unique = None
         self._weights = None
+        self.distancias_raw_ = None
+        self.distancias_smooth_ = None
+        self._distancias_x = None
 
     #La función Gaussian() genera la matriz de covarianzas y el vector de medias asociados a cada ventana de la serie de tiempo
     def Gaussian(self):
@@ -105,11 +106,152 @@ class CPD():
             d = np.sqrt(mean_sq + cov_term)
         else:
             d = np.sqrt(self.traces(S1, S2))
-                
-        if self.k_gauss:
-            return gaussian_filter1d(np.array(d), sigma=self.sigma_filter)
-        #return np.convolve(d, self.kernel_triangular(), mode='same')
+        
+        d = np.asarray(d, dtype=np.float64)
+        self.distancias_raw_ = d
+        self._distancias_x = np.arange(len(d), dtype=int) + self.window
+
+        if self.smooth:
+            x = np.arange(len(d))
+            self.distancias_smooth_, _ = csaps(x, d, x)
+            return self.distancias_smooth_
+
+        self.distancias_smooth_ = d.copy()
         return d
+
+    def plot_distancias(self, suavizada=True, title=None, path=None, show=False):
+        if self.distancias_raw_ is None or self.distancias_smooth_ is None:
+            self.distancias()
+
+        sns.set_theme(style="whitegrid", context="talk")
+
+        if suavizada:
+            dist = self.distancias_smooth_
+            label = "Distancia de Wasserstein"
+            color = "tab:purple"
+            default_title = "Distancia de Wasserstein suavizada"
+        else:
+            dist = self.distancias_raw_
+            label = "Distancia de Wasserstein"
+            color = "magenta"
+            default_title = "Distancia de Wasserstein sin suavizar"
+
+        x = np.arange(len(dist), dtype=int) + self.window
+
+        fig, ax = plt.subplots(figsize=(12, 5))
+        ax.plot(x, dist, linewidth=2.4, color=color, label=label)
+        ax.set_xlabel("Índice temporal")
+        ax.set_ylabel("Distancia de Wasserstein")
+        ax.set_title(default_title if title is None else title)
+        ax.grid(True, alpha=0.2)
+        ax.legend(frameon=True)
+        fig.tight_layout()
+
+        if path is not None:
+            fig.savefig(path, dpi=300, bbox_inches="tight")
+        if show:
+            plt.show()
+
+        return fig
+
+    def plot_resumen(self, cps=None, pc_detectados=None, title=None, path=None, show=False):
+        if self.distancias_raw_ is None or self.distancias_smooth_ is None:
+            self.distancias()
+
+        sns.set_theme(style="whitegrid", context="talk")
+
+        serie = np.asarray(self.Serie, dtype=np.float64)
+        x_serie = np.arange(len(serie), dtype=int)
+        x_dist = np.arange(len(self.distancias_raw_), dtype=int) + self.window
+
+        cps_list = [] if cps is None else np.asarray(cps).ravel().tolist()
+        pc_list = [] if pc_detectados is None else np.asarray(pc_detectados).ravel().tolist()
+
+        fig, ax1 = plt.subplots(figsize=(15, 5.5))
+
+        ax1.plot(
+            x_serie,
+            serie,
+            color="0.75",
+            linewidth=1.0,
+            alpha=0.8,
+            label="Serie de tiempo"
+        )
+
+        for i, cp in enumerate(cps_list):
+            ax1.axvline(
+                cp,
+                color="black",
+                linestyle=(0, (5, 4)),
+                linewidth=2.0,
+                alpha=0.95,
+                label="Puntos de cambio originales" if i == 0 else None
+            )
+
+        for i, cp in enumerate(pc_list):
+            ax1.axvline(
+                cp,
+                color="tab:purple",
+                linestyle=(0, (5, 4)),
+                linewidth=2.0,
+                alpha=0.9,
+                label="Puntos de Cambio Detectados" if i == 0 else None
+            )
+
+        ax2 = ax1.twinx()
+        ax2.plot(
+            x_dist,
+            self.distancias_smooth_,
+            color="tab:purple",
+            linewidth=3.0,
+            label="Distancia de Wasserstein"
+        )
+        '''ax2.plot(
+            x_dist,
+            self.distancias_raw_,
+            color="magenta",
+            linewidth=1.3,
+            alpha=0.65,
+            label="Distancia de Wasserstein sin suavizar"
+        )'''
+
+        ax1.set_xlabel("Índice temporal")
+        ax1.set_ylabel("Serie de tiempo")
+        ax2.set_ylabel("Distancia de Wasserstein")
+
+        ax1.tick_params(axis="y", labelcolor="0.25")
+        ax2.tick_params(axis="y", labelcolor="tab:purple")
+
+        ax1.set_xlim(x_serie.min(), x_serie.max())
+        ax2.set_xlim(x_serie.min(), x_serie.max())
+
+        handles1, labels1 = ax1.get_legend_handles_labels()
+        handles2, labels2 = ax2.get_legend_handles_labels()
+        handles = handles1 + handles2
+        labels = labels1 + labels2
+
+        legend_map = {}
+        for h, l in zip(handles, labels):
+            if l not in legend_map and l != "_nolegend_":
+                legend_map[l] = h
+
+        ax1.legend(
+            legend_map.values(),
+            legend_map.keys(),
+            loc="upper right",
+            frameon=True
+        )
+
+        ax1.set_title("Resumen general del algoritmo de detección" if title is None else title)
+        ax1.grid(True, alpha=0.2)
+        fig.tight_layout()
+
+        if path is not None:
+            fig.savefig(path, dpi=300, bbox_inches="tight")
+        if show:
+            plt.show()
+
+        return fig
 
     '''
     traces() recibe dos arreglos de matrices de covarianza (S1 y S2) y calcula, de forma vectorizada,
@@ -256,8 +398,7 @@ class CPD():
         class_defaults = {
             "m": self.m,
             "medias": self.medias,
-            "sigma_filter": self.sigma_filter,
-            "k_gauss": self.k_gauss
+            "smooth": self.smooth
         }
         for w in windows:
             t_max = max(w // 3, round(np.log(w)))
@@ -304,8 +445,7 @@ class CPD():
 
         if best_params is not None:
             self.window, self.t = best_params
-            #Se acota la desviación estándar del filtro gaussiano en 12 para evitar suavizar en exceso la curva de distancias con grandes tamaños de ventana
-            self.sigma_filter = min(math.ceil(math.sqrt(self.window)), 12)
+            # smoothing sigma parameter removed
         if penal:
             if join:
                 return best_dist, best_cp, espacio, f_costos, penalizaciones
@@ -319,8 +459,8 @@ class CPD():
     metaheurístico.
     '''
 
-    def slope_heuristic_fig(self, costs, penals, plot=True, path='slope_heuristic'):
-    
+    def slope_heuristic_fig(self, costs, penals, plot=True, path='slope_heuristic', s_thresh=0, given=True, geom=True, return_fig=False):
+        from Utils.tools import suavizar_media_movil, detectar_codo
         penal_to_costs = {}
         
         for key in costs:
@@ -341,29 +481,73 @@ class CPD():
         
         penals_sorted = [x[0] for x in result]
         min_costs = [x[1] for x in result]
-        
+
+        fig = None
+
         if plot:
-            plt.figure()
-            plt.plot(penals_sorted, min_costs, marker='o')
-            plt.xlabel("Penalización")
-            plt.ylabel("Costo mínimo")
-            plt.title("Slope Heuristic")
-            plt.grid(True)
-            plt.tight_layout()
-            plt.savefig(path, dpi=300, bbox_inches="tight")
-            plt.show()
-        
+            sns.set_theme(style="whitegrid", context="talk")
+            fig, ax = plt.subplots(figsize=(10, 5))
+
+            ax.plot(penals_sorted, min_costs, marker='o', linewidth=2.0, label='Costo mínimo')
+
+            thresh = None
+            idx_codo = None
+
+            if given:
+                thresh = s_thresh
+            else:
+                y_smooth = suavizar_media_movil(np.asarray(min_costs, dtype=np.float64))
+                ax.plot(penals_sorted, y_smooth, linewidth=2.2, linestyle='--', label='Suavizada')
+                idx_codo = detectar_codo(np.asarray(penals_sorted, dtype=np.float64), y_smooth, geom=geom)
+                thresh = penals_sorted[idx_codo]
+ 
+
+            if thresh is not None:
+                ax.axvline(thresh, linestyle='--', linewidth=2.0, color='tab:red', label=f'Codo detectado = {thresh:.2f}')
+                idx_plot = int(np.argmin(np.abs(np.asarray(penals_sorted, dtype=np.float64) - thresh)))
+                ax.scatter(
+                    penals_sorted[idx_plot],
+                    min_costs[idx_plot],
+                    s=40,
+                    zorder=5,
+                    color='tab:red'
+                )
+
+            ax.set_xlabel("Penalización")
+            ax.set_ylabel("Costo mínimo")
+            ax.set_title("Heurística de la pendiente")
+            ax.grid(True, alpha=0.3)
+            ax.legend(frameon=True)
+            fig.tight_layout()
+
+            if path is not None:
+                fig.savefig(path, dpi=300, bbox_inches="tight")
+
+        if return_fig:
+            return penals_sorted, min_costs, fig
+
         return penals_sorted, min_costs
     
-    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic', given=True, geom=True):
+    def slope_heuristic_regression(self, s_thresh, costs, penals, plot=True, path='slope_heuristic', given=True, geom=True, return_fig=False):
         from Utils.tools import hallar_pendiente
-        penals_sorted, min_costs = self.slope_heuristic_fig(costs, penals, plot, path)
+        penals_sorted, min_costs, fig = self.slope_heuristic_fig(
+            costs,
+            penals,
+            plot=plot,
+            path=path,
+            s_thresh=s_thresh,
+            given=given,
+            geom=geom,
+            return_fig=True
+        )
         penals_arr = np.array(penals_sorted)
         costs_arr = np.array(min_costs)
         
+        m = hallar_pendiente(penals_arr, costs_arr, s_thresh, given, plot=False)
         
-        m = hallar_pendiente(penals_arr, costs_arr, s_thresh, given, geom)
-        
+        if return_fig:
+            return abs(m), fig
+
         return abs(m)
         
 
@@ -384,8 +568,7 @@ class CPD():
         class_defaults = {
             "m": self.m,
             "medias": self.medias,
-            "sigma_filter": self.sigma_filter,
-            "k_gauss": self.k_gauss
+            "smooth": self.smooth
         }
 
         shared_array = mp.Array('d', self.Serie, lock=False)
@@ -419,6 +602,6 @@ class CPD():
         if best_params is not None:
             self.window, self.t = best_params
             #Se acota la desviación estándar del filtro gaussiano en 12 para evitar suavizar en exceso la curva de distancias con grandes tamaños de ventana
-            self.sigma_filter = min(int(np.sqrt(self.window)) + 1, 12)
+            # smoothing sigma parameter removed
 
         return best_dist, best_cp

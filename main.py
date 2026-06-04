@@ -1,4 +1,5 @@
 import numpy as np
+import time
 from Algoritmo_Gaussiano.cpd import CPD
 from Algoritmo_Empiricas.Empirical_CPD import EmpiricalCPD
 from Series_Prueba.periodical_data import generar_series_pc, next_prob, serie_pc
@@ -7,6 +8,14 @@ from Utils.detection import detect
 from Utils.metrics_sup import metrics
 from Series_Prueba.experimentos import samples_200_arma, samples_200_sin, ar2_noise
 from matplotlib.ticker import MultipleLocator
+import roerich
+from roerich.change_point import ChangePointDetectionClassifier
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from Algoritmo_KLIEP.kliep_cpd import KLIEP_CPD
+from Algoritmo_klcpd.klcpd import detect_changepoints as klcpd_detect
+
+from Utils.tools import (
+    best_params_sh)
 
 import time
 import pandas as pd
@@ -16,8 +25,165 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 import pandas as pd
+from scipy.stats import wilcoxon
+from tabulate import tabulate
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+
+
+def wilcoxon_metrica(arr_1,
+                     arr_2,
+                     minimizar=False,
+                     alpha=0.05):
+    """
+    Realiza un test de Wilcoxon pareado entre dos arreglos.
+
+    Parámetros
+    ----------
+    arr_1 : array-like
+        Resultados del método 1.
+
+    arr_2 : array-like
+        Resultados del método 2.
+
+    minimizar : bool, default=False
+        - False -> métricas donde mayor es mejor.
+        - True  -> métricas donde menor es mejor.
+
+    alpha : float, default=0.05
+        Nivel de significancia.
+
+    Retorna
+    -------
+    dict
+        Resultados estadísticos del test.
+    """
+
+    x = np.asarray(arr_1, dtype=float)
+    y = np.asarray(arr_2, dtype=float)
+
+    # Eliminación de NaN
+    mask = ~(np.isnan(x) | np.isnan(y))
+    x = x[mask]
+    y = y[mask]
+
+    # Wilcoxon pareado
+    stat, p_value = wilcoxon(x, y)
+
+    media_x = np.mean(x)
+    media_y = np.mean(y)
+
+    # Decisión estadística
+    diferencia = p_value < alpha
+
+    if diferencia:
+
+        if minimizar:
+            mejor = "Método 1" if media_x < media_y else "Método 2"
+        else:
+            mejor = "Método 1" if media_x > media_y else "Método 2"
+
+    else:
+        mejor = "Sin diferencia"
+
+    return {
+        "media_1": media_x,
+        "media_2": media_y,
+        "estadistico": stat,
+        "p_value": p_value,
+        "diferencia": diferencia,
+        "mejor": mejor
+    }
+
+
+def comparar_metricas(metricas_metodo_1,
+                      metricas_metodo_2,
+                      nombre_metodo_1="Gaussiano",
+                      nombre_metodo_2="Empírico",
+                      alpha=0.05,
+                      mostrar_tabla=True):
+    """
+    Compara múltiples métricas usando Wilcoxon pareado.
+
+    Orden esperado:
+    ----------------
+    [0] Error Medio de Localización
+    [1] Precisión
+    [2] Exactitud
+    [3] Medida F1
+    """
+
+    nombres_metricas = [
+        "Error Medio de Localización",
+        "Precisión",
+        "Exactitud",
+        "Medida F1"
+    ]
+
+    # True -> minimizar
+    # False -> maximizar
+    criterios = [
+        True,
+        False,
+        False,
+        False
+    ]
+
+    resultados = []
+
+    for nombre, minimizar, arr1, arr2 in zip(
+        nombres_metricas,
+        criterios,
+        metricas_metodo_1,
+        metricas_metodo_2
+    ):
+
+        r = wilcoxon_metrica(
+            arr1,
+            arr2,
+            minimizar=minimizar,
+            alpha=alpha
+        )
+
+        if r["mejor"] == "Método 1":
+            mejor = nombre_metodo_1
+        elif r["mejor"] == "Método 2":
+            mejor = nombre_metodo_2
+        else:
+            mejor = "Sin diferencia"
+
+        resultados.append({
+            "Métrica": nombre,
+            f"Promedio {nombre_metodo_1}": r["media_1"],
+            f"Promedio {nombre_metodo_2}": r["media_2"],
+            "p-valor": r["p_value"],
+            "Diferencia estadística": (
+                "Sí" if r["diferencia"] else "No"
+            ),
+            "Mejor método": mejor
+        })
+
+    tabla = pd.DataFrame(resultados)
+
+    if mostrar_tabla:
+
+        print("\n" + "=" * 110)
+        print("COMPARACIÓN ESTADÍSTICA ENTRE MÉTODOS (WILCOXON PAREADO)")
+        print("=" * 110)
+
+        print(tabulate(
+            tabla,
+            headers="keys",
+            tablefmt="fancy_grid",
+            showindex=False,
+            floatfmt=".6f"
+        ))
+
+        print("\n")
+        print(f"Nivel de significancia utilizado: alpha = {alpha}")
+
+    return tabla
 
 def boxplot_comp(M1, M2, columnas, title, path, usar_violin=False):
     sns.set(style="whitegrid", context="talk")
@@ -116,54 +282,54 @@ def arma_exp(seed, penal, path, window=30, t=0, m=0, f_gauss=6,
     return betha, f_costos, penalizaciones, metrics(cps, pc_detectados_dataset1, 30, T)
 
 
-
-
-if __name__ == "__main__":
-    '''
-    print("EXPERIMENTO AR(2) CON MEDIA Y DISPERSIÓN FLUCTUANTES")
-    met_gauss_ar2_1, met_emp_ar2_1 = samples_200_arma(seed=1234, N=200, thr_dist=30, min_seg=80, max_seg=120,
-                                                        base_mean=0.3, std_range=(0.3, 1.2), s_thresh=22, seed2=None, plot_cond=False, tail=False, given=False, plot_slope=False)
-    print('Gaussiana')
-    print(met_gauss_ar2_1)
-    print('Empírica')
-    print(met_emp_ar2_1)
-    print()
-    '''
-    data_ar2 = pd.read_excel("metricas_opt2_Codo.xlsx", sheet_name="M3")
-    f1_ar2 = data_ar2[data_ar2['F1 Score']<0.65]['F1 Score']
-    tail_list = (f1_ar2.index + 1).tolist()
-    
-    print("EXPERIMENTO AR(2) CON REZAGOS FLUCTUANTES")
-    met_gauss_ar2_2, met_emp_ar2_2 = samples_200_arma(seed=1234, N=200, thr_dist=30,
-                                                        random_phi=True, min_seg=80, max_seg=120,  base_mean=0.5, 
-                                                        random_mean=False, base_std=0.5, random_std=True, s_thresh=40, std_range=(0.3, 1.2), given=False, geom=False, plot_slope=True, tail=True, tail_list=tail_list)
-    
-  
-    print('Gaussiana')
-    print(met_gauss_ar2_2)
-    print('Empírica')
-    print(met_emp_ar2_2)
-    print()
-
-    
-    '''
-    np.savez(
-                "metricas_opt2_Codo.npz",
-                M1=met_gauss_ar2_1,
-                M2=met_emp_ar2_1,
-                M3=met_gauss_ar2_2,
-                M4=met_emp_ar2_2
-            )
-  
-    
-    data = np.load("metricas_opt2_Codo.npz")
-
+def generar_resumen(data):
     M1_opt = data["M1"]
     M2_opt = data["M2"]
     M3_opt = data["M3"]
     M4_opt = data["M4"]
     columnas = ['Mean Location Error', 'Precision', 'Recall', 'F1 Score', 'Accuracy', 'Falsos Positivos', 'Falsos Negativos', 'Verdaderos Positivos']
-   
+    
+
+    print("EXPERIMENTO AR(2) CON MEDIA Y DISPERSIÓN FLUCTUANTES")
+    print(f'Media F1 Gaussiana: {np.mean(M1_opt[:, 3])}')
+    print(f'Media F1 Empírica: {np.mean(M2_opt[:, 3])}')
+
+    met_gauss1 = np.array([M1_opt[:, 0], M1_opt[:, 1], M1_opt[:, 2], M1_opt[:, 3]])
+
+    met_emp1 = np.array([M2_opt[:, 0], M2_opt[:, 1], M2_opt[:, 2], M2_opt[:, 3]])
+
+    tabla_resultados1 = comparar_metricas(
+                                            met_gauss1,
+                                            met_emp1,
+                                            nombre_metodo_1="Gaussiano",
+                                            nombre_metodo_2="Empírico",
+                                            alpha=0.05)
+    boxplot_comp(M1_opt, M2_opt, columnas, "Comparación métricas AR variando media y dispersión", 'Gráficas/Umbral Suavizado/Comparación_AR_Media_', usar_violin=True)
+
+    
+    print("EXPERIMENTO AR(2) CON REZAGOS FLUCTUANTES")
+    print(f'Media F1 Gaussiana: {np.mean(M3_opt[:, 3])}')
+    print(f'Media F1 Empírica: {np.mean(M4_opt[:, 3])}')
+
+    met_gauss2 = np.array([M3_opt[:, 0], M3_opt[:, 1], M3_opt[:, 2], M3_opt[:, 3]])
+    met_emp2 = np.array([M4_opt[:, 0], M4_opt[:, 1], M4_opt[:, 2], M4_opt[:, 3]])
+    tabla_resultados2 = comparar_metricas(
+                                            met_gauss2,
+                                            met_emp2,
+                                            nombre_metodo_1="Gaussiano",
+                                            nombre_metodo_2="Empírico",
+                                            alpha=0.05)
+
+    boxplot_comp(M3_opt, M4_opt, columnas, "Comparación métricas AR variando rezagos", 'Gráficas/Umbral Suavizado/Comparación_AR_Rezagos_', usar_violin=True)
+
+def generar_informe(data):
+    M1_opt = data["M1"]
+    M2_opt = data["M2"]
+    M3_opt = data["M3"]
+    M4_opt = data["M4"]
+
+    columnas = ['Mean Location Error', 'Precision', 'Recall', 'F1 Score', 'Accuracy', 'Falsos Positivos', 'Falsos Negativos', 'Verdaderos Positivos']
+    
 
     ids = ["Gauss", "Empírico"]
 
@@ -176,32 +342,149 @@ if __name__ == "__main__":
     fila2 = [ids[1]] + list(np.mean(np.array(M4_opt), axis=0))
 
     df_ar2_2 = pd.DataFrame([fila1, fila2], columns=['Método']+columnas)
-    
-    #df_ar2_1.to_excel("Métricas_Experimento_AR2_1_Codo.xlsx", index=False)
-    #df_ar2_2.to_excel("Métricas_Experimento_AR2_2_Codo.xlsx", index=False)
-       
-    
-    #M5_opt = data["M5"]
-    #M6_opt = data["M6"]
-    #M7_opt = data["M7"]
-    #M8_opt = data["M8"]
+
+    df_ar2_1.to_excel("Resultados/Resumen_AR_Media.xlsx", index=False)
+    df_ar2_2.to_excel("Resultados/Resumen_AR_Rezagos.xlsx", index=False)
+
     df1 = pd.DataFrame(M1_opt, columns=columnas)
     df2 = pd.DataFrame(M2_opt, columns=columnas)
     df3 = pd.DataFrame(M3_opt, columns=columnas)
     df4 = pd.DataFrame(M4_opt, columns=columnas)
-    '''
+    
     # Exportar a un solo archivo Excel con múltiples hojas
-    '''with pd.ExcelWriter("metricas_opt2_Codo.xlsx") as writer:
+    with pd.ExcelWriter("Resultados/metricas_opt2_suavizado.xlsx") as writer:
         df1.to_excel(writer, sheet_name="M1", index=False)
         df2.to_excel(writer, sheet_name="M2", index=False)
         df3.to_excel(writer, sheet_name="M3", index=False)
-        df4.to_excel(writer, sheet_name="M4", index=False)'''
-
-    #boxplot_comp(M1_opt, M2_opt, columnas, "Comparación métricas AR variando media y dispersión", 'Gráficas/Umbral Variable/Comparación_AR_Media', usar_violin=True)
-    #boxplot_comp(M3_opt, M4_opt, columnas, "Comparación métricas AR variando rezagos", 'Gráficas/Umbral Variable/Comparación_AR_Rezagos', usar_violin=True)
+        df4.to_excel(writer, sheet_name="M4", index=False)
 
 
-    #boxplot_comp(M5_opt, M6_opt, columnas, "Comparación métricas ARMA")
-    #boxplot_comp(M7_opt, M8_opt, columnas, "Comparación métricas Serie Periódica")
+
+if __name__ == "__main__":
+    
+    '''
+    visualization = {
+                        "summary": False,
+                        "raw_distance": False,
+                        "smooth_distance": False,
+                        "cost": False,
+                        "slope": False
+                    }
+    print("EXPERIMENTO AR(2) CON MEDIA Y DISPERSIÓN FLUCTUANTES")
+    met_gauss_ar2_1, met_emp_ar2_1 = samples_200_arma(seed=1234, N=200, thr_dist=30, min_seg=80, max_seg=120,
+                                                        base_mean=0.3, std_range=(0.3, 1.2), s_thresh=22, given=False, geom=True, visualization=visualization, tail=False)
+    
+    
+    print("EXPERIMENTO AR(2) CON REZAGOS FLUCTUANTES")
+    met_gauss_ar2_2, met_emp_ar2_2 = samples_200_arma(seed=1234, N=200, thr_dist=30,
+                                                        random_phi=True, min_seg=80, max_seg=120,  base_mean=0.5, 
+                                                        random_mean=False, base_std=0.5, random_std=True, s_thresh=40, std_range=(0.3, 1.2), given=False, geom=True, visualization=visualization, tail=False)
+    
+  
+    
+    np.savez(
+                "Resultados/metricas_opt2_suavizado.npz",
+                M1=met_gauss_ar2_1,
+                M2=met_emp_ar2_1,
+                M3=met_gauss_ar2_2,
+                M4=met_emp_ar2_2
+            )
+    
+    
+    data = np.load("Resultados/metricas_opt2_suavizado.npz")
+
+    generar_informe(data)
+    generar_resumen(data)
+    '''
+
+    start = time.time()
+    
+    # Listas para acumular métricas de cada dataset
+    metricas_kliep = []
+    metricas_emp = []
+    
+    for i in range(5):
+        print(f"\n{'='*60}")
+        print(f"Procesando dataset {i+1}/5")
+        print(f"{'='*60}")
+        
+        dataset1, cps_ar, outliers_ar = ar2_noise(min_seg=80, max_seg=120, base_mean=0.3, std_range=(0.3, 1.2))
+    
+        met_dataset1_kliep = best_params_sh(
+                dataset1,
+                cps_ar,
+                modo='Kliep',
+                penal=True,
+                lambda_p=0,
+                given=False,
+                geom=True,
+                visualization={
+                    "summary": False,
+                    "raw_distance": False,
+                    "smooth_distance": False,
+                    "cost": False,
+                    "slope": False
+                }
+            )
+        
+        met_dataset1_emp = best_params_sh(
+                dataset1,
+                cps_ar,
+                modo='Empírico',
+                penal=True,
+                lambda_p=0,
+                given=False,
+                geom=True,
+                visualization={
+                    "summary": False,
+                    "raw_distance": False,
+                    "smooth_distance": False,
+                    "cost": False,
+                    "slope": False
+                }
+            )
+        
+        # Guardar métricas en listas (índice [0] contiene el diccionario de métricas)
+        metricas_kliep.append(list(met_dataset1_kliep[0].values()))
+        metricas_emp.append(list(met_dataset1_emp[0].values()))
+    
+    end = time.time()
+    
+    # Crear DataFrames con las métricas
+    columnas = ['Mean Location Error', 'Precision', 'Recall', 'F1 Score', 'Accuracy', 'Falsos Positivos', 'Falsos Negativos', 'Verdaderos Positivos']
+    
+    df_kliep = pd.DataFrame(metricas_kliep, columns=columnas)
+    df_emp = pd.DataFrame(metricas_emp, columns=columnas)
+    
+    # Guardar en Excel
+    df_kliep.to_excel("Resultados/experimento_kliep.xlsx", index=False)
+    df_emp.to_excel("Resultados/experimento_empirico.xlsx", index=False)
+    
+    print(f"\n{'='*60}")
+    print("Resultados guardados:")
+    print(f"  - Resultados/experimento_kliep.xlsx")
+    print(f"  - Resultados/experimento_empirico.xlsx")
+    print(f"Tiempo total de ejecución: {end - start:.2f} segundos")
+    print(f"{'='*60}")
+
+
+    #print("Métricas KLIEP:", met_dataset1_kliep)
+    '''changepoints = klcpd_detect(
+                                dataset1,
+                                wnd_dim=3,           # Ventana muy pequeña
+                                max_iter=20,         # Solo 20 iteraciones
+                                batch_size=256,      # Batches grandes
+                                eval_freq=10,        # Evalúa cada 10 iters
+                                lambda_ae=0.001,
+                                lambda_real=0.1,
+                                weight_clip=0.1
+                            )
+    print("Puntos de cambio detectados:", changepoints)
+    print()
+    print("Puntos de cambio reales:", cps_ar)
+    end = time.time()
+    print(f"Tiempo de ejecución: {end - start:.2f} segundos")'''
+    
+
 
     

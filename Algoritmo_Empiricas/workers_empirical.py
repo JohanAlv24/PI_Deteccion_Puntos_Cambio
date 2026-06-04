@@ -25,13 +25,12 @@ def evaluate_window_worker(task):
     model = EmpiricalCPD(
         serie,
         window=w,
-        sigma=config["sigma_filter"],
-        k_gauss=config["k_gauss"]
+        smooth=config["smooth"]
     )
 
     distancias = model.distancias()
 
-    change_points = detect(distancias, w, alpha=0.05, thr=0)
+    change_points = detect(distancias, w, alpha=0.05, thr=0, emp=True)
 
     cp_full = np.concatenate(([0], change_points, [len(serie)]))
     if penal:

@@ -1,0 +1,90 @@
+Namespace(data_path='./data\\beedance\\beedance-4.mat', trn_ratio=0.6, val_ratio=0.8, gpu=0, no_cuda=False, random_seed=1126, wnd_dim=25, sub_dim=1, RNN_hid_dim=10, batch_size=1, max_iter=1, optim='adam', lr=0.0003, weight_decay=0.0, momentum=0.0, grad_clip=10.0, eval_freq=25, CRITIC_ITERS=5, weight_clip=0.1, lambda_ae=0.001, lambda_real=1.0, save_path='experiment_log\\beedance-4.wnd-25.lambda_ae-0.001000.lambda_real-1.000000.clip-0.100000')
+Using CPU
+n_trn  429 n_val  151 n_tst  151
+NetG(
+  (rnn_enc_layer): GRU(3, 10, batch_first=True)
+  (rnn_dec_layer): GRU(3, 10, batch_first=True)
+  (fc_layer): Linear(in_features=10, out_features=3, bias=True)
+)
+NetD(
+  (rnn_enc_layer): GRU(3, 10, batch_first=True)
+  (rnn_dec_layer): GRU(10, 3, batch_first=True)
+)
+netG has number of parameters: 933
+netD has number of parameters: 585
+sigma_list: tensor([0.0474, 0.0948, 0.1896, 0.3792, 0.7584])
+n_batchs 429 batch_size 1
+start training: lambda_ae 0.001 lambda_real 1.0 weight_clip 0.1
+[    1/    1] [    6/  429] [     1] D_mmd2 3.8400e+00 G_mmd2 3.2172e+00 mmd2_real 1.2854e+00 real_L2 0.142638 fake_L2 0.122621
+[    1/    1] [   12/  429] [     2] D_mmd2 3.5142e+00 G_mmd2 3.7986e+00 mmd2_real 1.2854e+00 real_L2 0.208013 fake_L2 0.123595
+[    1/    1] [   18/  429] [     3] D_mmd2 3.7466e+00 G_mmd2 4.0026e+00 mmd2_real 6.3575e-01 real_L2 0.120740 fake_L2 0.107803
+[    1/    1] [   24/  429] [     4] D_mmd2 3.8222e+00 G_mmd2 3.7440e+00 mmd2_real 1.2917e+00 real_L2 0.152867 fake_L2 0.118145
+[    1/    1] [   30/  429] [     5] D_mmd2 3.8314e+00 G_mmd2 4.0301e+00 mmd2_real 1.3122e+00 real_L2 0.149544 fake_L2 0.098418
+[    1/    1] [   36/  429] [     6] D_mmd2 4.0710e+00 G_mmd2 3.8197e+00 mmd2_real 1.3135e+00 real_L2 0.191317 fake_L2 0.111453
+[    1/    1] [   42/  429] [     7] D_mmd2 3.0108e+00 G_mmd2 4.4614e+00 mmd2_real 2.1004e+00 real_L2 0.095400 fake_L2 0.084627
+[    1/    1] [   48/  429] [     8] D_mmd2 4.3782e+00 G_mmd2 3.9538e+00 mmd2_real 1.1133e+00 real_L2 0.278872 fake_L2 0.104788
+[    1/    1] [   54/  429] [     9] D_mmd2 4.5178e+00 G_mmd2 4.7707e+00 mmd2_real 1.1372e+00 real_L2 0.211981 fake_L2 0.121624
+[    1/    1] [   60/  429] [    10] D_mmd2 4.2715e+00 G_mmd2 4.1773e+00 mmd2_real 1.1951e+00 real_L2 0.138104 fake_L2 0.084504
+[    1/    1] [   66/  429] [    11] D_mmd2 4.4544e+00 G_mmd2 3.7857e+00 mmd2_real 4.3415e-01 real_L2 0.136750 fake_L2 0.110425
+[    1/    1] [   72/  429] [    12] D_mmd2 4.1269e+00 G_mmd2 4.1960e+00 mmd2_real 1.0637e+00 real_L2 0.137298 fake_L2 0.090508
+[    1/    1] [   78/  429] [    13] D_mmd2 3.7872e+00 G_mmd2 4.6138e+00 mmd2_real 1.6362e+00 real_L2 0.136387 fake_L2 0.066446
+[    1/    1] [   84/  429] [    14] D_mmd2 4.3809e+00 G_mmd2 4.7262e+00 mmd2_real 6.1539e-01 real_L2 0.152861 fake_L2 0.074249
+[    1/    1] [   90/  429] [    15] D_mmd2 4.5589e+00 G_mmd2 4.4692e+00 mmd2_real 6.5017e-01 real_L2 0.232284 fake_L2 0.104290
+[    1/    1] [   96/  429] [    16] D_mmd2 4.6497e+00 G_mmd2 4.3667e+00 mmd2_real 5.4575e-01 real_L2 0.244924 fake_L2 0.075131
+[    1/    1] [  102/  429] [    17] D_mmd2 4.4395e+00 G_mmd2 4.9799e+00 mmd2_real 8.5276e-01 real_L2 0.165196 fake_L2 0.102954
+[    1/    1] [  108/  429] [    18] D_mmd2 4.8815e+00 G_mmd2 4.7225e+00 mmd2_real 1.1882e+00 real_L2 0.206768 fake_L2 0.077506
+[    1/    1] [  114/  429] [    19] D_mmd2 4.8097e+00 G_mmd2 4.3625e+00 mmd2_real 6.3043e-01 real_L2 0.143299 fake_L2 0.093708
+[    1/    1] [  120/  429] [    20] D_mmd2 4.8242e+00 G_mmd2 4.7485e+00 mmd2_real 3.8963e-01 real_L2 0.226957 fake_L2 0.073814
+[    1/    1] [  126/  429] [    21] D_mmd2 4.8199e+00 G_mmd2 4.8615e+00 mmd2_real 1.2448e+00 real_L2 0.303612 fake_L2 0.082139
+[    1/    1] [  132/  429] [    22] D_mmd2 5.2998e+00 G_mmd2 4.2619e+00 mmd2_real 9.0421e-01 real_L2 0.311042 fake_L2 0.081348
+[    1/    1] [  138/  429] [    23] D_mmd2 5.2194e+00 G_mmd2 4.5816e+00 mmd2_real 9.7696e-01 real_L2 0.207459 fake_L2 0.075265
+[    1/    1] [  144/  429] [    24] D_mmd2 4.7029e+00 G_mmd2 4.8927e+00 mmd2_real 6.4092e-01 real_L2 0.182281 fake_L2 0.073210
+[    1/    1] [  150/  429] [    25] D_mmd2 4.9066e+00 G_mmd2 4.7305e+00 mmd2_real 6.5148e-01 real_L2 0.238233 fake_L2 0.076481
+iter    1 tm 0.19m val_mse -1.0 val_mae -1.0 val_auc 0.549320 tst_mse -1.0 tst_mae -1.0 tst_auc 0.490991 [best_val_auc 0.549320 best_tst_auc 0.490991 best_epoch   1]
+[    1/    1] [  156/  429] [    26] D_mmd2 4.6016e+00 G_mmd2 5.5599e+00 mmd2_real 3.0278e-01 real_L2 0.112158 fake_L2 0.067320
+[    1/    1] [  162/  429] [    27] D_mmd2 5.0030e+00 G_mmd2 4.5950e+00 mmd2_real 9.9503e-01 real_L2 0.198847 fake_L2 0.064310
+[    1/    1] [  168/  429] [    28] D_mmd2 4.9957e+00 G_mmd2 4.9166e+00 mmd2_real 1.0002e+00 real_L2 0.129436 fake_L2 0.083852
+[    1/    1] [  174/  429] [    29] D_mmd2 4.2324e+00 G_mmd2 5.0355e+00 mmd2_real 1.2846e+00 real_L2 0.068818 fake_L2 0.053639
+[    1/    1] [  180/  429] [    30] D_mmd2 5.4927e+00 G_mmd2 4.6530e+00 mmd2_real 6.0886e-01 real_L2 0.287286 fake_L2 0.071156
+[    1/    1] [  186/  429] [    31] D_mmd2 4.4431e+00 G_mmd2 4.7726e+00 mmd2_real 6.9697e-01 real_L2 0.134325 fake_L2 0.057072
+[    1/    1] [  192/  429] [    32] D_mmd2 5.5311e+00 G_mmd2 4.6656e+00 mmd2_real 1.0984e+00 real_L2 0.207652 fake_L2 0.067459
+[    1/    1] [  198/  429] [    33] D_mmd2 5.1732e+00 G_mmd2 4.9066e+00 mmd2_real 7.4469e-01 real_L2 0.214482 fake_L2 0.078542
+[    1/    1] [  204/  429] [    34] D_mmd2 5.0272e+00 G_mmd2 4.7818e+00 mmd2_real 8.7652e-01 real_L2 0.134364 fake_L2 0.058295
+[    1/    1] [  210/  429] [    35] D_mmd2 4.6345e+00 G_mmd2 5.1845e+00 mmd2_real 1.2462e+00 real_L2 0.161775 fake_L2 0.062288
+[    1/    1] [  216/  429] [    36] D_mmd2 5.2566e+00 G_mmd2 5.3302e+00 mmd2_real 1.0040e+00 real_L2 0.158178 fake_L2 0.062046
+[    1/    1] [  222/  429] [    37] D_mmd2 4.9296e+00 G_mmd2 4.5969e+00 mmd2_real 3.5922e-01 real_L2 0.211730 fake_L2 0.089805
+[    1/    1] [  228/  429] [    38] D_mmd2 5.0477e+00 G_mmd2 5.4063e+00 mmd2_real 5.8794e-01 real_L2 0.088095 fake_L2 0.044725
+[    1/    1] [  234/  429] [    39] D_mmd2 5.3591e+00 G_mmd2 5.6868e+00 mmd2_real 4.0301e-01 real_L2 0.174760 fake_L2 0.057926
+[    1/    1] [  240/  429] [    40] D_mmd2 4.2794e+00 G_mmd2 5.5966e+00 mmd2_real 1.6547e+00 real_L2 0.077457 fake_L2 0.051068
+[    1/    1] [  246/  429] [    41] D_mmd2 5.8197e+00 G_mmd2 5.5919e+00 mmd2_real 6.4655e-01 real_L2 0.263959 fake_L2 0.056974
+[    1/    1] [  252/  429] [    42] D_mmd2 5.3283e+00 G_mmd2 5.2037e+00 mmd2_real 5.6366e-01 real_L2 0.121627 fake_L2 0.044927
+[    1/    1] [  258/  429] [    43] D_mmd2 5.6527e+00 G_mmd2 5.4796e+00 mmd2_real 7.5309e-01 real_L2 0.197701 fake_L2 0.061129
+[    1/    1] [  264/  429] [    44] D_mmd2 5.3772e+00 G_mmd2 5.6107e+00 mmd2_real 5.6292e-01 real_L2 0.123013 fake_L2 0.035343
+[    1/    1] [  270/  429] [    45] D_mmd2 4.3626e+00 G_mmd2 5.5673e+00 mmd2_real 9.9473e-01 real_L2 0.138365 fake_L2 0.050142
+[    1/    1] [  276/  429] [    46] D_mmd2 5.2969e+00 G_mmd2 5.5407e+00 mmd2_real 6.6755e-01 real_L2 0.213494 fake_L2 0.034287
+[    1/    1] [  282/  429] [    47] D_mmd2 5.4524e+00 G_mmd2 5.0711e+00 mmd2_real 6.8427e-01 real_L2 0.188352 fake_L2 0.040056
+[    1/    1] [  288/  429] [    48] D_mmd2 5.7058e+00 G_mmd2 5.7576e+00 mmd2_real 9.5865e-01 real_L2 0.223918 fake_L2 0.041593
+[    1/    1] [  294/  429] [    49] D_mmd2 5.2932e+00 G_mmd2 5.2775e+00 mmd2_real 1.3450e+00 real_L2 0.156513 fake_L2 0.040593
+[    1/    1] [  300/  429] [    50] D_mmd2 5.2755e+00 G_mmd2 5.9065e+00 mmd2_real 1.0058e+00 real_L2 0.132006 fake_L2 0.039399
+iter    1 tm 0.42m val_mse -1.0 val_mae -1.0 val_auc 0.593537 tst_mse -1.0 tst_mae -1.0 tst_auc 0.583333 [best_val_auc 0.549320 best_tst_auc 0.490991 best_epoch   1]
+[    1/    1] [  306/  429] [    51] D_mmd2 4.8308e+00 G_mmd2 5.8283e+00 mmd2_real 7.1108e-01 real_L2 0.134003 fake_L2 0.032330
+[    1/    1] [  312/  429] [    52] D_mmd2 5.0997e+00 G_mmd2 5.6734e+00 mmd2_real 6.3093e-01 real_L2 0.128103 fake_L2 0.040659
+[    1/    1] [  318/  429] [    53] D_mmd2 6.2085e+00 G_mmd2 5.4315e+00 mmd2_real 8.3292e-01 real_L2 0.222041 fake_L2 0.045319
+[    1/    1] [  324/  429] [    54] D_mmd2 6.0276e+00 G_mmd2 5.4793e+00 mmd2_real 5.5905e-01 real_L2 0.150400 fake_L2 0.036555
+[    1/    1] [  330/  429] [    55] D_mmd2 5.0687e+00 G_mmd2 5.1567e+00 mmd2_real 5.6823e-01 real_L2 0.170983 fake_L2 0.033151
+[    1/    1] [  336/  429] [    56] D_mmd2 5.4369e+00 G_mmd2 4.6407e+00 mmd2_real 4.0760e-01 real_L2 0.101250 fake_L2 0.034807
+[    1/    1] [  342/  429] [    57] D_mmd2 5.1723e+00 G_mmd2 5.5818e+00 mmd2_real 7.5831e-01 real_L2 0.106077 fake_L2 0.026211
+[    1/    1] [  348/  429] [    58] D_mmd2 6.1174e+00 G_mmd2 5.3716e+00 mmd2_real 5.3891e-01 real_L2 0.158417 fake_L2 0.033365
+[    1/    1] [  354/  429] [    59] D_mmd2 5.6270e+00 G_mmd2 5.2901e+00 mmd2_real 7.2747e-01 real_L2 0.155277 fake_L2 0.031847
+[    1/    1] [  360/  429] [    60] D_mmd2 5.1747e+00 G_mmd2 5.3496e+00 mmd2_real 3.9257e-01 real_L2 0.098120 fake_L2 0.046735
+[    1/    1] [  366/  429] [    61] D_mmd2 5.6095e+00 G_mmd2 5.3725e+00 mmd2_real 5.5980e-01 real_L2 0.115299 fake_L2 0.030209
+[    1/    1] [  372/  429] [    62] D_mmd2 5.4616e+00 G_mmd2 5.6972e+00 mmd2_real 6.9231e-01 real_L2 0.101993 fake_L2 0.036601
+[    1/    1] [  378/  429] [    63] D_mmd2 5.4610e+00 G_mmd2 5.4237e+00 mmd2_real 3.6540e-01 real_L2 0.079788 fake_L2 0.033393
+[    1/    1] [  384/  429] [    64] D_mmd2 5.8086e+00 G_mmd2 4.8375e+00 mmd2_real 3.1276e-01 real_L2 0.083798 fake_L2 0.026033
+[    1/    1] [  390/  429] [    65] D_mmd2 5.5285e+00 G_mmd2 6.0291e+00 mmd2_real 6.9044e-01 real_L2 0.106820 fake_L2 0.024686
+[    1/    1] [  396/  429] [    66] D_mmd2 5.7175e+00 G_mmd2 5.4258e+00 mmd2_real 2.7240e-01 real_L2 0.129696 fake_L2 0.021864
+[    1/    1] [  402/  429] [    67] D_mmd2 5.2203e+00 G_mmd2 5.4532e+00 mmd2_real 4.9983e-01 real_L2 0.080746 fake_L2 0.032633
+[    1/    1] [  408/  429] [    68] D_mmd2 5.2040e+00 G_mmd2 5.8503e+00 mmd2_real 6.3053e-01 real_L2 0.130747 fake_L2 0.024058
+[    1/    1] [  414/  429] [    69] D_mmd2 5.2033e+00 G_mmd2 5.7003e+00 mmd2_real 1.2834e+00 real_L2 0.099053 fake_L2 0.028228
+[    1/    1] [  420/  429] [    70] D_mmd2 5.0100e+00 G_mmd2 5.8706e+00 mmd2_real 7.4352e-01 real_L2 0.100871 fake_L2 0.046570
+[    1/    1] [  426/  429] [    71] D_mmd2 5.7464e+00 G_mmd2 5.8301e+00 mmd2_real 7.0844e-01 real_L2 0.095414 fake_L2 0.023730
