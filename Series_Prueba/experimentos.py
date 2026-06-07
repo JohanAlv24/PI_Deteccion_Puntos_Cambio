@@ -201,7 +201,7 @@ def samples_200_arma(
         )
 
         ejecutar = (not tail) or ((i + 1) in tail_list)
-
+    
         if not ejecutar:
             continue
 
@@ -245,7 +245,7 @@ def samples_200_arma(
             s_thresh=s_thresh,
             penal=True,
             lambda_p=0,
-            gauss=False,
+            modo="Empírico",
             given=given,
             geom=geom,
             visualization={
@@ -256,7 +256,7 @@ def samples_200_arma(
                 "slope": slope_enabled
             }
         )
-
+        
         print_toolbox_section("Resumen de métricas")
 
         print_metrics_block(
@@ -292,8 +292,8 @@ def samples_200_arma(
         "Experimentos solicitados",
         N
     )
-
-    return metricas_gauss, metricas_emp
+    
+    return met_dataset1_gauss, met_dataset1_emp
 
 def samples_200_sin(tran_mat, exp, pc_params, min_w, n, penal, lambda_p, N=200, w=30, t=0, m=0, seed=None, thr_dist=30,
                      sigma_amp = 0.1, sigma_freq = 0.003, sigma_fase = 0.05, sigma_pend = 0.0,

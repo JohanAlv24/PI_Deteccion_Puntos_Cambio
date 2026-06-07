@@ -362,7 +362,7 @@ def generar_informe(data):
 
 if __name__ == "__main__":
     
-    '''
+    
     visualization = {
                         "summary": False,
                         "raw_distance": False,
@@ -395,6 +395,9 @@ if __name__ == "__main__":
 
     generar_informe(data)
     generar_resumen(data)
+
+
+    
     '''
 
     start = time.time()
@@ -469,7 +472,7 @@ if __name__ == "__main__":
 
 
     #print("Métricas KLIEP:", met_dataset1_kliep)
-    '''changepoints = klcpd_detect(
+    changepoints = klcpd_detect(
                                 dataset1,
                                 wnd_dim=3,           # Ventana muy pequeña
                                 max_iter=20,         # Solo 20 iteraciones
