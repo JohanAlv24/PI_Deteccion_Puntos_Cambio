@@ -190,11 +190,20 @@ def best_params_sh(
     modo="Gaussiano",
     given=True,
     geom=True,
-    visualization=None
+    visualization=None,
+    thr_dist=30,
+    min_w = None,
+    max_w = None
 ):
 
     if visualization is None:
         visualization = {}
+
+    if min_w is None:
+        min_w = T // 100
+
+    if max_w is None:
+        max_w = T // 10
 
     summary_enabled = visualization.get("summary", False)
     raw_enabled = visualization.get("raw_distance", False)
@@ -222,7 +231,8 @@ def best_params_sh(
         start = time.time()
 
         best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window_t(
-            max_w=T // 10,
+            max_w = max_w,
+            min_w = min_w,
             penal=penal,
             lambda_p=lambda_p,
             join=False
@@ -395,7 +405,8 @@ def best_params_sh(
             start = time.time()
 
             best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window(
-                max_w=T // 10,
+                min_w = min_w,
+                max_w = max_w,
                 penal=penal,
                 lambda_p=lambda_p,
                 join=False
@@ -410,7 +421,8 @@ def best_params_sh(
             start = time.time()
 
             best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window(
-                max_w=T // 10,
+                min_w=min_w,
+                max_w=max_w,
                 penal=penal,
                 lambda_p=lambda_p,
                 join=False
@@ -582,7 +594,7 @@ def best_params_sh(
     return metrics(
         cps,
         pc_detectados_dataset1,
-        30,
+        thr_dist,
         T
     )
 

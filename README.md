@@ -270,6 +270,76 @@ metricas_gauss, metricas_emp = samples_200_arma(
 
 En este caso solo se ejecutan los experimentos 2, 5 y 8.
 
+## 5. Uso directo de los algoritmos (sin búsqueda exhaustiva)
+
+En algunos escenarios puede ser conveniente fijar manualmente los hiperparámetros del algoritmo y omitir la búsqueda exhaustiva realizada por `best_params_sh`. Esto permite evaluar directamente una configuración específica.
+
+### Ejemplo con el método empírico
+
+```python
+from Algoritmo_Empiricas.Empirical_CPD import EmpiricalCPD
+from Utils.detection import detect
+from Utils.metrics_sup import metrics
+
+# Serie de tiempo
+serie = ...
+
+# Puntos de cambio reales
+cps_reales = ...
+
+algoritmo_emp = EmpiricalCPD(
+    serie,
+    window=100
+)
+
+distancias_emp = algoritmo_emp.distancias()
+
+pc_detectados_emp = detect(
+    distancias_emp,
+    window=100
+)
+
+metricas_emp = metrics(
+    cps_reales,
+    pc_detectados_emp,
+    threshold=50,
+    T=len(serie)
+)
+```
+
+### Ejemplo con el método gaussiano
+
+```python
+from Algoritmo_Gaussiano.cpd import CPD
+from Utils.detection import detect
+from Utils.metrics_sup import metrics
+
+# Serie de tiempo
+serie = ...
+
+# Puntos de cambio reales
+cps_reales = ...
+
+algoritmo_gauss = CPD(
+    serie,
+    window=100,
+    t=10
+)
+
+distancias_gauss = algoritmo_gauss.distancias()
+
+pc_detectados_gauss = detect(
+    distancias_gauss,
+    window=100
+)
+
+metricas_gauss = metrics(
+    cps_reales,
+    pc_detectados_gauss,
+    threshold=50,
+    T=len(serie)
+)
+```
 ---
 
 

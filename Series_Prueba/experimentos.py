@@ -236,7 +236,8 @@ def samples_200_arma(
                 "smooth_distance": smooth_enabled,
                 "cost": cost_enabled,
                 "slope": slope_enabled
-            }
+            },
+            thr_dist=thr_dist
         )
 
         met_dataset1_emp = best_params_sh(
@@ -254,7 +255,8 @@ def samples_200_arma(
                 "smooth_distance": smooth_enabled,
                 "cost": cost_enabled,
                 "slope": slope_enabled
-            }
+            },
+            thr_dist=thr_dist
         )
         
         print_toolbox_section("Resumen de métricas")
