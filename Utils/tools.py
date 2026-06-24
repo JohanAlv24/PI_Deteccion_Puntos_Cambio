@@ -195,6 +195,7 @@ def best_params_sh(
     min_w = None,
     max_w = None
 ):
+    T = len(dataset)
 
     if visualization is None:
         visualization = {}

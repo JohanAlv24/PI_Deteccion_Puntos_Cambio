@@ -348,3 +348,331 @@ def samples_200_sin(tran_mat, exp, pc_params, min_w, n, penal, lambda_p, N=200, 
     print_toolbox_item("Experimentos ejecutados", N)
 
     return metricas_gauss, metricas_emp
+
+
+def generar_experimento_ar1(
+    N,
+    n_segmentos,
+    min_sep,
+    max_sep,
+    betas=(0.8, -0.8),
+    sigma_y=1.0,
+    seed=None
+):
+
+    rng = np.random.default_rng(seed)
+
+  
+    longitudes = []
+    restante = N
+
+    for i in range(n_segmentos - 1):
+
+        seg_restantes = n_segmentos - i - 1
+
+        minimo_factible = max(
+            min_sep,
+            restante - seg_restantes * max_sep
+        )
+
+        maximo_factible = min(
+            max_sep,
+            restante - seg_restantes * min_sep
+        )
+
+        L = rng.integers(
+            minimo_factible,
+            maximo_factible + 1
+        )
+
+        longitudes.append(L)
+        restante -= L
+
+    longitudes.append(restante)
+
+  
+    betas_segmentos = [rng.choice(betas)]
+
+    for _ in range(n_segmentos - 1):
+
+        candidatos = [
+            b for b in betas
+            if b != betas_segmentos[-1]
+        ]
+
+        betas_segmentos.append(
+            rng.choice(candidatos)
+        )
+
+  
+    y = np.zeros(N)
+
+    cps = []
+    segmentos = []
+
+    pos = 0
+
+    y[0] = rng.normal(0, sigma_y)
+
+    for i, (L, beta) in enumerate(
+        zip(longitudes, betas_segmentos)
+    ):
+
+        sigma_eps = sigma_y * np.sqrt(
+            1 - beta**2
+        )
+
+        inicio = pos
+        fin = pos + L
+
+        segmentos.append({
+            "segmento": i,
+            "inicio": inicio,
+            "fin": fin - 1,
+            "longitud": L,
+            "beta": beta,
+            "sigma_eps": sigma_eps
+        })
+
+        if i > 0:
+            cps.append(inicio)
+
+        for t in range(max(1, inicio), fin):
+
+            y[t] = (
+                beta * y[t - 1]
+                + rng.normal(0, sigma_eps)
+            )
+
+        pos = fin
+
+    return (
+        y,
+        np.array(cps),
+        segmentos
+ )
+
+
+def generar_experimento_senoidal(
+    N,
+    n_segmentos,
+    min_sep,
+    max_sep,
+    A=1.0,
+    sigma_eps=0.5,
+    omegas=(np.pi/10, np.pi/5),
+    fase_aleatoria=False,
+    seed=None
+):
+
+    rng = np.random.default_rng(seed)
+
+ 
+    longitudes = []
+    restante = N
+
+    for i in range(n_segmentos - 1):
+
+        seg_restantes = n_segmentos - i - 1
+
+        minimo_factible = max(
+            min_sep,
+            restante - seg_restantes * max_sep
+        )
+
+        maximo_factible = min(
+            max_sep,
+            restante - seg_restantes * min_sep
+        )
+
+        L = rng.integers(
+            minimo_factible,
+            maximo_factible + 1
+        )
+
+        longitudes.append(L)
+        restante -= L
+
+    longitudes.append(restante)
+
+
+    omegas_segmentos = [rng.choice(omegas)]
+
+    for _ in range(n_segmentos - 1):
+
+        candidatos = [
+            w for w in omegas
+            if w != omegas_segmentos[-1]
+        ]
+
+        omegas_segmentos.append(
+            rng.choice(candidatos)
+        )
+
+    y = np.zeros(N)
+
+    cps = []
+    segmentos = []
+
+    pos = 0
+
+    for i, (L, omega) in enumerate(
+        zip(longitudes, omegas_segmentos)
+    ):
+
+        t_local = np.arange(L)
+
+        if fase_aleatoria:
+            phi = rng.uniform(0, 2*np.pi)
+        else:
+            phi = 0.0
+
+        señal = A * np.sin(
+            omega * t_local + phi
+        )
+
+        ruido = rng.normal(
+            0,
+            sigma_eps,
+            size=L
+        )
+
+        y[pos:pos+L] = señal + ruido
+
+        segmentos.append({
+            "segmento": i,
+            "inicio": pos,
+            "fin": pos + L - 1,
+            "longitud": L,
+            "omega": omega,
+            "periodo": 2*np.pi / omega,
+            "fase": phi
+        })
+
+        if i > 0:
+            cps.append(pos)
+
+        pos += L
+
+    return (
+        y,
+        np.array(cps),
+        segmentos
+    )
+
+
+def generar_experimento_ar2(
+    N,
+    n_segmentos,
+    min_sep,
+    max_sep,
+    sigma=0.5,
+    seed=None
+):
+
+    rng = np.random.default_rng(seed)
+
+
+    if N < n_segmentos * min_sep:
+        raise ValueError(
+            "N es demasiado pequeño para acomodar "
+            "todos los segmentos."
+        )
+
+    if N > n_segmentos * max_sep:
+        raise ValueError(
+            "N es demasiado grande para los límites "
+            "de longitud especificados."
+        )
+
+ 
+    longitudes = []
+    restante = N
+
+    for i in range(n_segmentos - 1):
+
+        seg_restantes = n_segmentos - i - 1
+
+        minimo_factible = max(
+            min_sep,
+            restante - seg_restantes * max_sep
+        )
+
+        maximo_factible = min(
+            max_sep,
+            restante - seg_restantes * min_sep
+        )
+
+        L = rng.integers(
+            minimo_factible,
+            maximo_factible + 1
+        )
+
+        longitudes.append(L)
+        restante -= L
+
+    longitudes.append(restante)
+
+
+    regimen_A = (1.0, -0.8)
+    regimen_B = (-1.0, -0.8)
+
+    regimen_actual = rng.choice([0, 1])
+
+    parametros = []
+
+    for _ in range(n_segmentos):
+
+        if regimen_actual == 0:
+            parametros.append(regimen_A)
+            regimen_actual = 1
+        else:
+            parametros.append(regimen_B)
+            regimen_actual = 0
+
+
+    y = np.zeros(N)
+
+    # Inicialización
+    y[0] = rng.normal(0, sigma)
+    y[1] = rng.normal(0, sigma)
+
+    cps = []
+    segmentos = []
+
+    pos = 0
+
+    for idx, (L, (phi1, phi2)) in enumerate(
+        zip(longitudes, parametros)
+    ):
+
+        inicio = pos
+        fin = pos + L
+
+        segmentos.append({
+            "segmento": idx,
+            "inicio": inicio,
+            "fin": fin - 1,
+            "longitud": L,
+            "phi1": phi1,
+            "phi2": phi2
+        })
+
+        if idx > 0:
+            cps.append(inicio)
+
+        t_inicio = max(inicio, 2)
+
+        for t in range(t_inicio, fin):
+
+            eps = rng.normal(0, sigma)
+
+            y[t] = (
+                phi1 * y[t - 1]
+                + phi2 * y[t - 2]
+                + eps
+            )
+
+        pos = fin
+
+    return y, np.array(cps), segmentos
