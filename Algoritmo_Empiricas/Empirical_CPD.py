@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 from csaps import csaps
 import multiprocessing as mp
 import scipy.io as scio
+from scipy.interpolate import UnivariateSpline
 from Algoritmo_Empiricas.workers_empirical import init_worker_empirical, evaluate_window_worker
+from Utils.detection import detect
 import os
 
 class EmpiricalCPD():
@@ -14,7 +16,7 @@ class EmpiricalCPD():
     window: Tamaño de la ventana
     smooth: Condicional para aplicar filtro gaussiano a la curva de distancias de Wasserstein
     '''
-    def __init__(self, X, window=0, smooth=True):
+    def __init__(self, X, window=0, smooth=True, max_bandwidth=False, prominence_ratio=0.05):
 
         self.Serie = np.asarray(X, dtype=np.float64)
 
@@ -22,11 +24,15 @@ class EmpiricalCPD():
 
         self.smooth = bool(smooth)
 
+        self.max_bandwidth = bool(max_bandwidth)
+
         self._sorted_unique = None
         self._weights = None
 
         self.last_distance_raw = None
         self.last_distance_smooth = None
+        self._distancias_x = None
+        self.prominence_ratio = float(prominence_ratio)
 
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -63,6 +69,87 @@ class EmpiricalCPD():
 
         return np.array(d)
 
+
+    def bspline_smooth_cv(self, degree=3, n_s_values=20, random_state=42):
+        y = self.last_distance_raw.copy()
+        x = self._distance_x.copy()
+
+        # Rango razonable para s
+        variance = np.var(y)
+        s_candidates = np.geomspace(
+            max(1e-8, 0.1 * len(y) * variance),
+            max(1e-7, 10 * len(y) * variance),
+            n_s_values
+        )
+
+        best_s = None
+        best_error = np.inf
+
+        for s in s_candidates:
+            errors = []
+
+           
+
+            spline = UnivariateSpline(
+                    x,
+                    y,
+                    k=degree,
+                    s=s
+            )
+
+            pred = spline(x)
+            errors.append(np.mean((pred - y)**2))
+
+            error = np.mean(errors)
+
+            if error < best_error:
+                best_error = error
+                best_s = s
+
+        spline = UnivariateSpline(x, y, k=degree, s=best_s)
+
+        return spline(x)
+    
+
+    def triangular_smooth(self, distancias=None):
+
+        if distancias is None:
+            distancias = self.last_distance_raw
+
+        
+        y = np.asarray(distancias, dtype=np.float64)
+        if self.max_bandwidth:
+            window = min(int(self.window//2), int(np.sqrt(len(self.Serie))))
+
+        else:
+            window = int(self.window//2)
+
+        offsets = np.arange(
+            -window,
+            window + 1
+        )
+
+        kernel = np.maximum(
+            1.0 - np.abs(offsets) / window,
+            0.0
+        )
+
+        kernel = kernel / kernel.sum()
+
+        padded = np.pad(
+            y,
+            pad_width=window,
+            mode="reflect"
+        )
+
+        smoothed = np.convolve(
+            padded,
+            kernel,
+            mode="valid"
+        )
+
+        return smoothed
+
     #Calcula la distancia de Wasserstein entre ventanas consecutivas no traslapadas de la serie de tiempo y retorna la curva de distancia suavizada
     def distancias(self):
 
@@ -71,69 +158,101 @@ class EmpiricalCPD():
         d = self.empirical_cpd(self.Serie, w)
 
         self.last_distance_raw = np.array(d)
+        self._distance_x = np.arange(len(d), dtype=int) + self.window
 
         if self.smooth:
 
-            x = np.arange(len(d))
-
             #d_smooth, smooth_used = csaps(x, d, x)
 
-            self.filter = self.filter[0::int(np.ceil(len(self.filter)/(2*self.window)))]-0.166
-            self.filter = self.filter / np.sum(self.filter)
-            d_smooth = np.convolve(d, self.filter, mode='same')
-            self.last_distance_smooth = np.array(d_smooth)
+            #self.last_distance_smooth = self.bspline_smooth_cv()
+            self.last_distance_smooth = self.triangular_smooth()
 
-
-            return d_smooth
+            return self.last_distance_smooth
 
         self.last_distance_smooth = np.array(d)
 
         return d
 
-    def mle(self):
+    @staticmethod
+    def _wasserstein_1d_sorted(x_sorted, y_sorted):
+       
+        x_sorted = np.asarray(x_sorted, dtype=np.float64).ravel()
+        y_sorted = np.asarray(y_sorted, dtype=np.float64).ravel()
 
-        sorted_unique = np.sort(np.unique(self.Serie))
+        n_x = x_sorted.size
+        n_y = y_sorted.size
 
-        T = len(sorted_unique)
+        if n_x == 0 or n_y == 0:
+            return np.inf
 
-        u = np.arange(1, T + 1)
+        if n_x == n_y:
+            return float(np.mean(np.abs(x_sorted - y_sorted)))
 
-        weights = 1.0 / ((u - 0.5) * (T - u + 0.5))
+        support = np.sort(np.concatenate((x_sorted, y_sorted)))
 
-        self._sorted_unique = sorted_unique
-        self._weights = weights
+        if support.size < 2:
+            return 0.0
 
-        return sorted_unique, weights
+        intervals = np.diff(support)
+        left_points = support[:-1]
 
-    def segment_cost_mle(self, start, end, sorted_unique, weights):
-        '''
-        Calcula el costo de un segmento de la serie temporal bajo el enfoque de máxima verosimilitud
-        basado en la entropía de una distribución empírica.
-        Los parámetros:
-        start, end: índices que delimitan el segmento 
-        sorted_unique: valores únicos ordenados de la serie 
-        weights: pesos asociados a cada valor (el artículo ya da una formulación para estos pesos)
-        '''
-        segment = self.Serie[start:end]
-
-        n = len(segment)
-
-        segment_sorted = np.sort(segment)
-
-        counts = np.searchsorted(segment_sorted, sorted_unique, side="right")
-
-        F_hat = counts / n
-
-        eps = 1e-12
-
-        F_hat = np.clip(F_hat, eps, 1 - eps)
-
-        entropy_term = (
-            F_hat * np.log(F_hat)
-            + (1 - F_hat) * np.log(1 - F_hat)
+        cdf_x = (
+            np.searchsorted(x_sorted, left_points, side="right")
+            / n_x
+        )
+        cdf_y = (
+            np.searchsorted(y_sorted, left_points, side="right")
+            / n_y
         )
 
-        return -n * np.sum(entropy_term * weights)
+        return float(
+            np.sum(np.abs(cdf_x - cdf_y) * intervals)
+        )
+
+    def consecutive_segment_wasserstein(
+        self,
+        segment_distributions
+    ):
+        """Suma W1 entre distribuciones de segmentos consecutivos."""
+        total = 0.0
+
+        for left, right in zip(
+            segment_distributions[:-1],
+            segment_distributions[1:]
+        ):
+            total += self._wasserstein_1d_sorted(left, right)
+
+        return float(total)
+
+    def _segment_boundaries(self, change_points):
+      
+        N = len(self.Serie)
+
+        if change_points is None:
+            internal = np.empty(0, dtype=int)
+        else:
+            values = np.asarray(change_points).ravel()
+            values = values[np.isfinite(values)].astype(int, copy=False)
+            internal = np.unique(values[(values > 0) & (values < N)])
+
+        return np.concatenate((
+            np.array([0], dtype=int),
+            internal,
+            np.array([N], dtype=int)
+        ))
+    def segment_empirical_distributions(self, change_points):
+      
+        boundaries = self._segment_boundaries(change_points)
+
+        segments = [
+            np.sort(self.Serie[start:end])
+            for start, end in zip(boundaries[:-1], boundaries[1:])
+        ]
+
+        lengths = np.diff(boundaries).astype(int, copy=False)
+
+        return boundaries, segments, lengths
+
 
     '''
     La función total_cost recibe la lista de puntos de cambio (change_poins) y aplica la función de coste a cada segmento
@@ -141,27 +260,53 @@ class EmpiricalCPD():
     en el proceso de optimización
     '''
     def total_cost(self, change_points, penal=True):
+        boundaries, segment_distributions, segment_lengths = (
+            self.segment_empirical_distributions(change_points)
+        )
 
-        sorted_unique, weights = self.mle()
-
-        total = 0.0
-
-        for i in range(len(change_points) - 1):
-
-            total += self.segment_cost_mle(
-                change_points[i],
-                change_points[i + 1],
-                sorted_unique,
-                weights
-            )
+        n_segments = len(segment_distributions)
+        n_change_points = max(0, n_segments - 1)
 
         if penal:
+            separation = self.consecutive_segment_wasserstein(
+                segment_distributions
+            )
 
-            penalty = len(change_points)
+            total = -separation / max(1, n_segments)
 
-            return total, penalty
+            return float(total), int(n_change_points)
 
-        return total
+        N = len(self.Serie)
+
+        if n_segments <= 1 or N <= n_segments:
+            return 0.0
+
+        intra = self.variance_intrasegment(
+            segment_distributions
+        )
+        inter = self.variance_intersegment(
+            segment_distributions,
+            segment_lengths
+        )
+
+        numerical_tolerance = (
+            np.finfo(np.float64).eps
+            * max(1.0, abs(inter), abs(intra))
+        )
+
+        if intra <= numerical_tolerance:
+            return 0.0
+
+        pseudo_f = (
+            inter / (n_segments - 1)
+        ) / (
+            intra / (N - n_segments)
+        )
+
+        if not np.isfinite(pseudo_f):
+            return 0.0
+
+        return -float(pseudo_f)
 
     '''
     Realiza la búsque exhaustiva del tamaño de ventana. 
@@ -174,58 +319,100 @@ class EmpiricalCPD():
         min_w=None,
         max_w=None,
         penal=False,
-        lambda_p=0,
+        lambda_p=-1,
         join=True
     ):
 
         T = len(self.Serie)
 
-        if not min_w:
+        if min_w is None:
             min_w = 9
 
-        if not max_w:
-            max_w = T // 2
+        min_w = int(min_w)
 
-        print("\n" + "=" * 70)
-        print(" EmpiricalCPD :: Exhaustive Window Optimization")
-        print("=" * 70)
-        print(f" Serie length                : {T}")
-        print(f" Window search interval      : [{min_w}, {max_w}]")
-        print(f" Penalized optimization      : {penal}")
-        print(f" Gaussian smoothing enabled  : {self.smooth}")
-        print("=" * 70)
+        if min_w < 3:
+            raise ValueError(
+                "min_w debe ser mayor o igual que 3."
+            )
+
+        max_w_allowed = (T - 2) // 2
+
+        if max_w is None:
+            max_w = max_w_allowed
+        else:
+            max_w = min(int(max_w), max_w_allowed)
+
+        if min_w > max_w:
+            raise ValueError(
+                "No existen ventanas factibles en el intervalo "
+                f"[{min_w}, {max_w}]."
+            )
+
+        use_joined_penalty = bool(penal and join)
+
+        if use_joined_penalty:
+            if lambda_p is None or lambda_p == -1:
+                raise ValueError(
+                    "Cuando penal=True y join=True debe suministrarse "
+                    "un lambda_p no negativo. Si el regularizador se "
+                    "calibra externamente, use join=False."
+                )
+
+            if lambda_p < 0:
+                raise ValueError(
+                    "lambda_p debe ser no negativo."
+                )
+
+            effective_lambda = float(lambda_p)
+        else:
+            effective_lambda = None
 
         windows = np.arange(min_w, max_w + 1, dtype=int)
 
-        tasks = []
-
         config = {
-            "smooth": self.smooth
+            "smooth": self.smooth,
+            "max_bandwidth": self.max_bandwidth,
+            "prominence_ratio": self.prominence_ratio
         }
 
-        for w in windows:
-            tasks.append((w, penal, lambda_p, config))
+        tasks = [
+            (int(w), bool(penal), config)
+            for w in windows
+        ]
+
+        tasks.sort(
+            key=lambda task: (
+                (T - task[0] + 1) * task[0]
+            ),
+            reverse=True
+        )
 
         shared_array = mp.Array('d', self.Serie, lock=False)
 
         length = len(self.Serie)
 
-        best_cost = np.inf
+        best_rank = None
         best_window = None
-        best_cp = None
-        best_dist = None
 
         if join:
             espacio = {}
 
         f_costos = {}
-        penalizaciones = {}
+        if penal:
+            penalizaciones = {}
 
-        n_jobs = max(1, mp.cpu_count() - 1)
+        n_jobs = min(
+            max(1, mp.cpu_count() - 1),
+            len(tasks)
+        )
 
-        print(f" Parallel workers            : {n_jobs}")
-        print(f" Total candidate windows     : {len(tasks)}")
-        print("-" * 70)
+        chunksize = max(
+            1,
+            min(
+                8,
+                len(tasks) // max(1, 8 * n_jobs)
+            )
+        )
 
         with mp.Pool(
             processes=n_jobs,
@@ -233,65 +420,65 @@ class EmpiricalCPD():
             initargs=(shared_array, length)
         ) as pool:
             
-            for idx, result in enumerate(
-                pool.imap_unordered(
-                    evaluate_window_worker,
-                    tasks,
-                    chunksize=64
-                ),
-                start=1
-            ):
+            results = pool.imap_unordered(
+                evaluate_window_worker,
+                tasks,
+                chunksize=chunksize
+            )
+
+            for result in results:
 
                 if penal:
 
-                    total, penalty, w, cps, distancias = result
+                    total, penalty, w = result
 
                     f_costos[w] = total
                     penalizaciones[w] = penalty
 
-                    cost = total + lambda_p * penalty
+                    if use_joined_penalty:
+                        selection_cost = (
+                            total
+                            + effective_lambda * penalty
+                        )
+                    else:
+                        selection_cost = total
 
                 else:
 
-                    cost, w, cps, distancias = result
+                    total, w = result
+
+                    f_costos[w] = total
+                    selection_cost = total
 
                 if join:
-                    espacio[w] = cost
+                    espacio[w] = selection_cost
 
-                if cost < best_cost:
+                if not np.isfinite(selection_cost):
+                    continue
 
-                    best_cost = cost
-                    best_window = w
-                    best_cp = cps
-                    best_dist = distancias
+                candidate_rank = (
+                    float(selection_cost),
+                    int(w)
+                )
 
-                    print(
-                        f"[BEST UPDATE] "
-                        f"w={w:<4} | "
-                        f"cost={best_cost:.6f} | "
-                        f"cp={len(best_cp)}"
-                    )
+                if best_rank is None or candidate_rank < best_rank:
+                    best_rank = candidate_rank
+                    best_window = int(w)
 
-                if idx % max(1, len(tasks)//10) == 0:
+        if best_window is None:
+            raise RuntimeError(
+                "Todas las ventanas produjeron costos no finitos."
+            )
 
-                    progress = 100 * idx / len(tasks)
+        self.window = best_window
 
-                    print(
-                        f"[PROGRESS] "
-                        f"{idx}/{len(tasks)} "
-                        f"({progress:.1f}%)"
-                    )
-
-        if best_window is not None:
-
-            self.window = best_window
-
-        print("-" * 70)
-        print(" Optimización Finalizada")
-        print(f" ventana óptima              : {self.window}")
-        # smoothing sigma parameter removed
-        print(f" Mejor valor función objetivo        : {best_cost:.6f}")
-        print("=" * 70 + "\n")
+        best_dist = self.distancias()
+        best_cp = detect(
+            best_dist,
+            self.window,
+            thr=0,
+            prominence_ratio = self.prominence_ratio
+        )
 
         if penal:
 
@@ -300,7 +487,10 @@ class EmpiricalCPD():
 
             return best_dist, best_cp, f_costos, penalizaciones
 
-        return best_dist, best_cp, espacio
+        if join:
+            return best_dist, best_cp, espacio, f_costos
+
+        return best_dist, best_cp, f_costos
 
     def slope_heuristic_fig(
         self,
@@ -311,7 +501,8 @@ class EmpiricalCPD():
         s_thresh=0,
         given=True,
         geom=True,
-        return_fig=False
+        return_fig=False,
+        save_fig=False
     ):
 
         penal_to_costs = {}
@@ -353,7 +544,7 @@ class EmpiricalCPD():
                 min_costs,
                 marker='o',
                 linewidth=2.0,
-                label='Costo mínimo'
+                label='Minimum Cost',
             )
 
             thresh = None
@@ -370,7 +561,7 @@ class EmpiricalCPD():
                     y_smooth,
                     linewidth=2.2,
                     linestyle='--',
-                    label='Suavizada'
+                    label='Smoothed',
                 )
                 idx_codo = detectar_codo(np.asarray(penals_sorted, dtype=np.float64), y_smooth, geom=geom)
                 thresh = penals_sorted[idx_codo]
@@ -382,7 +573,7 @@ class EmpiricalCPD():
                     linestyle='--',
                     linewidth=2.0,
                     color='tab:red',
-                    label=f'Codo detectado = {thresh:.2f}'
+                    label=f'Detected Elbow = {thresh:.2f}'
                 )
                 idx_plot = int(
                     np.argmin(
@@ -399,14 +590,14 @@ class EmpiricalCPD():
                     color='tab:red'
                 )
 
-            ax.set_xlabel("Penalización")
-            ax.set_ylabel("Costo mínimo")
-            ax.set_title("Heurística de la pendiente")
+            ax.set_xlabel("Penalization")
+            ax.set_ylabel("Minimum Cost")
+            ax.set_title("Slope Heuristic")
             ax.grid(True, alpha=0.3)
             ax.legend(frameon=True)
             fig.tight_layout()
 
-            if path is not None:
+            if path is not None and save_fig:
                 fig.savefig(
                     path,
                     dpi=300,
@@ -432,7 +623,8 @@ class EmpiricalCPD():
         path='slope_heuristic',
         given=True,
         geom=True,
-        return_fig=False
+        return_fig=False,
+        save_fig=False
     ):
 
         from Utils.tools import hallar_pendiente
@@ -445,7 +637,8 @@ class EmpiricalCPD():
             s_thresh=s_thresh,
             given=given,
             geom=geom,
-            return_fig=True
+            return_fig=True,
+            save_fig=save_fig
         )
 
         penals_arr = np.array(penals_sorted)
@@ -458,12 +651,15 @@ class EmpiricalCPD():
             given
         )
 
+        if m > 0.01:
+            m = 0
+
         if return_fig:
             return abs(m), fig
 
         return abs(m)
 
-    def plot_distancias(self, suavizada=True, title=None, path=None, show=False):
+    def plot_distancias(self, suavizada=True, title=None, path=None, show=False, save_fig=False):
         """
         Grafica la curva de distancias de Wasserstein (raw o suavizada).
         
@@ -490,34 +686,35 @@ class EmpiricalCPD():
 
         if suavizada:
             dist = self.last_distance_smooth
-            label = "Distancia de Wasserstein"
+            label = "Wasserstein Distance (Smoothed)"
             color = "tab:purple"
-            default_title = "Distancia de Wasserstein suavizada"
+            default_title = "Wasserstein Distance (Smoothed)"
         else:
             dist = self.last_distance_raw
-            label = "Distancia de Wasserstein"
+            label = "Wasserstein Distance"
             color = "magenta"
-            default_title = "Distancia de Wasserstein sin suavizar"
+            default_title = "Wasserstein Distance"
 
         x = np.arange(len(dist), dtype=int) + self.window
 
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(x, dist, linewidth=2.4, color=color, label=label)
-        ax.set_xlabel("Índice temporal")
-        ax.set_ylabel("Distancia de Wasserstein")
+        ax.set_xlabel("Temporal Index")
+        ax.set_ylabel("Wasserstein Distance")
         ax.set_title(default_title if title is None else title)
         ax.grid(True, alpha=0.2)
         ax.legend(frameon=True)
         fig.tight_layout()
 
-        if path is not None:
+        if path is not None and save_fig:
             fig.savefig(path, dpi=300, bbox_inches="tight")
         if show:
             plt.show()
 
+
         return fig
 
-    def plot_resumen(self, cps=None, pc_detectados=None, title=None, path=None, show=False):
+    def plot_resumen(self, cps=None, pc_detectados=None, title=None, path=None, show=False, save_fig=False):
         """
         Grafica un resumen general del algoritmo de detección de cambios.
         Incluye la serie temporal, puntos de cambio reales, puntos detectados
@@ -542,7 +739,9 @@ class EmpiricalCPD():
             La figura generada.
         """
         if self.last_distance_raw is None or self.last_distance_smooth is None:
-            self.distancias()
+                    self.distancias()
+
+
 
         sns.set_theme(style="whitegrid", context="talk")
 
@@ -561,7 +760,7 @@ class EmpiricalCPD():
             color="0.75",
             linewidth=1.0,
             alpha=0.8,
-            label="Serie de tiempo"
+            label="Time Series"
         )
 
         for i, cp in enumerate(cps_list):
@@ -571,7 +770,7 @@ class EmpiricalCPD():
                 linestyle=(0, (5, 4)),
                 linewidth=2.0,
                 alpha=0.95,
-                label="Puntos de cambio originales" if i == 0 else None
+                label="Original Change Points" if i == 0 else None
             )
 
         for i, cp in enumerate(pc_list):
@@ -581,16 +780,28 @@ class EmpiricalCPD():
                 linestyle=(0, (5, 4)),
                 linewidth=2.0,
                 alpha=0.9,
-                label="Puntos de cambio detectados" if i == 0 else None
+                label="Detected Change Points" if i == 0 else None
             )
 
         ax2 = ax1.twinx()
+        # Eje x por defecto
+        x_dist = np.arange(len(self.last_distance_raw), dtype=int) + self.window
+
+        # Si las dimensiones no coinciden, reajustar el eje x
+        # para que tenga la misma longitud que la curva a graficar.
+        '''if len(x_dist) != len(self.last_distance_smooth):
+           
+            x_dist = np.arange(
+                len(self.last_distance_smooth),
+                dtype=int
+            ) + self.window'''
+
         ax2.plot(
             x_dist,
             self.last_distance_smooth,
             color="tab:purple",
             linewidth=3.0,
-            label="Distancia de Wasserstein"
+            label="Wasserstein Distance (Smoothed)"
         )
         '''ax2.plot(
             x_dist,
@@ -598,12 +809,12 @@ class EmpiricalCPD():
             color="magenta",
             linewidth=1.3,
             alpha=0.65,
-            label="Distancia de Wasserstein sin suavizar"
+            label="Wasserstein Distance (Raw)"
         )'''
 
-        ax1.set_xlabel("Índice temporal")
-        ax1.set_ylabel("Serie de tiempo")
-        ax2.set_ylabel("Distancia de Wasserstein")
+        ax1.set_xlabel("Temporal Index")
+        ax1.set_ylabel("Time Series")
+        ax2.set_ylabel("Wasserstein Distance")
 
         ax1.tick_params(axis="y", labelcolor="0.25")
         ax2.tick_params(axis="y", labelcolor="tab:purple")
@@ -632,7 +843,7 @@ class EmpiricalCPD():
         ax1.grid(True, alpha=0.2)
         fig.tight_layout()
 
-        if path is not None:
+        if path is not None and save_fig:
             fig.savefig(path, dpi=300, bbox_inches="tight")
         if show:
             plt.show()
@@ -645,7 +856,8 @@ class EmpiricalCPD():
         cps_detected=None,
         title='EmpiricalCPD Summary',
         path=None,
-        show=False
+        show=False,
+        save_fig=False
     ):
 
         fig, axes = plt.subplots(
@@ -712,7 +924,7 @@ class EmpiricalCPD():
 
         fig.tight_layout()
 
-        if path is not None:
+        if path is not None and save_fig:
 
             fig.savefig(
                 path,

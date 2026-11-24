@@ -50,7 +50,7 @@ def print_metrics_block(title, metric_dict, indent=4, precision=4):
         print_toolbox_item(str(key), value, indent=indent, precision=precision)
 
 
-def graficar_mapa_calor(start, end, CPD, espacio, title, path, show=False, object_use=True, best_key=None):
+def graficar_mapa_calor(start, end, CPD, espacio, title, path, show=False, object_use=True, best_key=None, save_fig=True):
     print_toolbox_section("Mapa de calor")
     print_toolbox_item("Tiempo de ejecución", f"{end-start:.4f} s")
 
@@ -116,60 +116,197 @@ def graficar_mapa_calor(start, end, CPD, espacio, title, path, show=False, objec
     ax.set_title(title)
 
     fig.tight_layout()
-    fig.savefig(path, dpi=300, bbox_inches="tight")
+    if save_fig:
+        fig.savefig(path, dpi=300, bbox_inches="tight")
     if show:
         plt.show()
 
     return fig
 
+def graficar_dispersion_costo(
+    start,
+    end,
+    CPD,
+    espacio,
+    title,
+    path,
+    show=False,
+    object_use=True,
+    best_key=None,
+    save_fig=True
+):
+    print_toolbox_section(
+        "Dispersion of Cost"
+    )
 
-def graficar_dispersion_costo(start, end, CPD, espacio, title, path, show=False, object_use=True, best_key=None):
-    print_toolbox_section("Dispersión de costo")
-    print_toolbox_item("Tiempo de ejecución", f"{end-start:.4f} s")
+    print_toolbox_item(
+        "Execution Time",
+        f"{end - start:.4f} s"
+    )
 
     if object_use:
-        print_toolbox_item("Mejor ventana", CPD.window)
+        print_toolbox_item(
+            "Best Window",
+            CPD.window
+        )
     else:
-        print_toolbox_item("Mejor ventana", CPD)
+        print_toolbox_item(
+            "Best Window",
+            CPD
+        )
 
-    ws_emp = np.array(sorted(espacio.keys()))
-    costs_emp = np.array([espacio[w] for w in ws_emp])
+    ws_emp = np.asarray(
+        sorted(espacio.keys())
+    )
 
-    sns.set_theme(style="whitegrid", context="talk")
-    fig, ax = plt.subplots(figsize=(10, 6))
+    costs_emp = np.asarray(
+        [
+            espacio[w]
+            for w in ws_emp
+        ],
+        dtype=np.float64
+    )
 
-    ax.scatter(ws_emp, costs_emp, s=30, alpha=0.85)
+    sns.set_theme(
+        style="whitegrid",
+        context="talk"
+    )
 
+    fig, ax = plt.subplots(
+        figsize=(10, 6)
+    )
+
+    ax.scatter(
+        ws_emp,
+        costs_emp,
+        s=30,
+        alpha=0.85
+    )
+
+    # Resaltar la ventana finalmente seleccionada.
     if best_key is not None:
-        if isinstance(best_key, (tuple, list, np.ndarray)):
+        if isinstance(
+            best_key,
+            (
+                tuple,
+                list,
+                np.ndarray
+            )
+        ):
             best_w = best_key[0]
         else:
             best_w = best_key
-        if np.any(ws_emp == best_w):
-            idx = np.where(ws_emp == best_w)[0][0]
-            ax.scatter(ws_emp[idx], costs_emp[idx], s=110, facecolors='none', edgecolors='red', linewidths=2.2)
 
+        selected = np.flatnonzero(
+            ws_emp == best_w
+        )
+
+        if selected.size > 0:
+            index = selected[0]
+
+            ax.scatter(
+                ws_emp[index],
+                costs_emp[index],
+                s=110,
+                facecolors="none",
+                edgecolors="red",
+                linewidths=2.2,
+                label=f"Selected Window: {best_w}"
+            )
+
+    # Estos son índices del arreglo, no posiciones
+    # del eje x.
     max_step = 10
-    step_x = min(max_step, max(1, len(ws_emp) // 10))
-    x_tick_positions = np.unique(np.concatenate((np.arange(0, len(ws_emp), step_x), [len(ws_emp) - 1])))
 
-    ax.set_xticks(x_tick_positions)
-    ax.set_xticklabels([ws_emp[i] for i in x_tick_positions], rotation=45, ha='right')
-    label_size = 10 if len(ws_emp) <= 20 else 8 if len(ws_emp) <= 40 else 6
-    ax.tick_params(axis='x', labelsize=label_size)
+    step_x = min(
+        max_step,
+        max(
+            1,
+            len(ws_emp) // 10
+        )
+    )
 
-    ax.set_xlabel("Tamaño de ventana (w)")
-    ax.set_ylabel("Costo")
-    ax.set_title(title)
-    ax.grid(alpha=0.3)
+    tick_indices = np.unique(
+        np.concatenate(
+            (
+                np.arange(
+                    0,
+                    len(ws_emp),
+                    step_x
+                ),
+                np.array(
+                    [len(ws_emp) - 1]
+                )
+            )
+        )
+    )
+
+    # Las posiciones reales de los ticks deben ser
+    # los valores de ventana correspondientes.
+    tick_values = ws_emp[
+        tick_indices
+    ]
+
+    ax.set_xticks(
+        tick_values
+    )
+
+    ax.set_xticklabels(
+        [
+            str(value)
+            for value in tick_values
+        ],
+        rotation=45,
+        ha="right"
+    )
+
+    label_size = (
+        10
+        if len(ws_emp) <= 20
+        else 8
+        if len(ws_emp) <= 40
+        else 6
+    )
+
+    ax.tick_params(
+        axis="x",
+        labelsize=label_size
+    )
+
+    ax.set_xlabel(
+        "Window Size (w)"
+    )
+
+    ax.set_ylabel(
+        "Cost"
+    )
+
+    ax.set_title(
+        title
+    )
+
+    ax.grid(
+        alpha=0.3
+    )
+
+    if best_key is not None:
+        ax.legend(
+            fontsize=9
+        )
+
     fig.tight_layout()
-    fig.savefig(path, dpi=300, bbox_inches="tight")
+
+    if save_fig and path is not None:
+        fig.savefig(
+            path,
+            dpi=300,
+            bbox_inches="tight"
+        )
+
     if show:
         plt.show()
 
     return fig
-
-
 def penalized_costs(costs, penals, beta):
     result = {
         key: costs[key] + beta * penals[key]
@@ -178,22 +315,30 @@ def penalized_costs(costs, penals, beta):
     best_key = min(result, key=result.get)
     return best_key, result
 
-
 def best_params_sh(
     dataset,
     cps,
-    path='Gráficas/',
-    name='',
+    path="Gráficas/",
+    name="",
     s_thresh=0,
     penal=True,
-    lambda_p=0,
     modo="Gaussiano",
     given=True,
     geom=True,
+    mean_gauss=True,
     visualization=None,
     thr_dist=30,
-    min_w = None,
-    max_w = None
+    min_w=None,
+    max_w=None,
+    smooth_distances=True,
+    return_cps_list=False,
+    t_given=None,
+    temporal_comp=True,
+    max_comp=False,
+    min_comp=False,
+    save_fig=True,
+    max_bandwidth=False,
+    prominence_ratio=0.05
 ):
     T = len(dataset)
 
@@ -201,403 +346,570 @@ def best_params_sh(
         visualization = {}
 
     if min_w is None:
-        min_w = T // 100
+        min_w = max(
+            9,
+            T // 100
+        )
 
     if max_w is None:
         max_w = T // 10
 
-    summary_enabled = visualization.get("summary", False)
-    raw_enabled = visualization.get("raw_distance", False)
-    smooth_enabled = visualization.get("smooth_distance", False)
-    cost_enabled = visualization.get("cost", False)
-    slope_enabled = visualization.get("slope", False)
+    if modo not in {
+        "Gaussiano",
+        "Empírico"
+    }:
+        raise ValueError(
+            "modo debe ser 'Gaussiano' o 'Empírico'."
+        )
+
+
+    summary_enabled = visualization.get(
+        "summary",
+        False
+    )
+    raw_enabled = visualization.get(
+        "raw_distance",
+        False
+    )
+    smooth_enabled = visualization.get(
+        "smooth_distance",
+        False
+    )
+    cost_enabled = visualization.get(
+        "cost",
+        False
+    )
+    slope_enabled = visualization.get(
+        "slope",
+        False
+    )
 
     figuras = []
     figuras_generadas = []
 
+    def register_figure(figure, description):
+        if figure is not None:
+            figuras.append(figure)
+            figuras_generadas.append(
+                description
+            )
 
-    print_toolbox_header(f"Optimización {modo}")
+    print_toolbox_header(
+        f"Optimización {modo}"
+    )
+
+    print_toolbox_item(
+        "Tamaño de serie",
+        T
+    )
+    print_toolbox_item(
+        "Penalización",
+        penal
+    )
+
+    if penal:
+        print_toolbox_item(
+            "Codo dado",
+            given
+        )
+        print_toolbox_item(
+            "Codo geométrico",
+            geom
+        )
 
     if modo == "Gaussiano":
-
-        CPD_dataset1 = CPD(dataset)
-
-        T = len(dataset)
-
-        print_toolbox_item("Tamaño de serie", T)
-        print_toolbox_item("Penalización", penal)
-        print_toolbox_item("Codo dado", given)
-        print_toolbox_item("Codo geométrico", geom)
-
-        start = time.time()
-
-        best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window_t(
-            max_w = max_w,
-            min_w = min_w,
-            penal=penal,
-            lambda_p=lambda_p,
-            join=False
+        CPD_dataset1 = CPD(
+            dataset,
+            smooth=smooth_distances,
+            medias=mean_gauss,
+            temporal_comp=temporal_comp,
+            max_comp=max_comp,
+            min_comp=min_comp,
+            max_bandwidth=max_bandwidth,
+            prominence_ratio=prominence_ratio
+        )
+    else:
+        CPD_dataset1 = EmpiricalCPD(
+            dataset,
+            smooth=smooth_distances,
+            max_bandwidth=max_bandwidth,
+            prominence_ratio=prominence_ratio
         )
 
-        end = time.time()
+    start = time.time()
 
-        betha, fig_slope = CPD_dataset1.slope_heuristic_regression(
-            s_thresh,
-            f_costos,
-            penalizaciones,
-            plot=slope_enabled,
-            path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope ' + name,
-            given=given,
-            geom=geom,
-            return_fig=True
-        )
-
-        if fig_slope is not None:
-
-            figuras.append(fig_slope)
-
-            figuras_generadas.append(
-                "Slope heuristic"
+    if modo == "Gaussiano":
+        if penal:
+            (
+                _,
+                _,
+                f_costos,
+                penalizaciones
+            ) = CPD_dataset1.opt_window_t(
+                max_w=max_w,
+                min_w=min_w,
+                penal=True,
+                join=False,
+                t_given=t_given
             )
+        else:
+            (
+                _,
+                _,
+                f_costos
+            ) = CPD_dataset1.opt_window_t(
+                max_w=max_w,
+                min_w=min_w,
+                penal=False,
+                join=False,
+                t_given=t_given
+            )
+
+    else:
+        if penal:
+            (
+                _,
+                _,
+                f_costos,
+                penalizaciones
+            ) = CPD_dataset1.opt_window(
+                min_w=min_w,
+                max_w=max_w,
+                penal=True,
+                join=False
+            )
+        else:
+            (
+                _,
+                _,
+                f_costos
+            ) = CPD_dataset1.opt_window(
+                min_w=min_w,
+                max_w=max_w,
+                penal=False,
+                join=False
+            )
+
+    end = time.time()
+
+    beta = None
+    gamma = None
+    result = None
+    fig_slope = None
+
+    if penal:
+        beta, fig_slope = (
+            CPD_dataset1.slope_heuristic_regression(
+                s_thresh,
+                f_costos,
+                penalizaciones,
+                plot=slope_enabled,
+                path=(
+                    path
+                    + "Heuristic_Slope/"
+                    + "Visualización_Heuristic_Slope "
+                    + name
+                ),
+                given=given,
+                geom=geom,
+                return_fig=True,
+                save_fig=save_fig
+            )
+        )
+
+        gamma = 2.0 * beta
 
         best_key, result = penalized_costs(
             f_costos,
             penalizaciones,
-            2 * betha
+            gamma
         )
 
-        CPD_dataset1.window, CPD_dataset1.t = best_key
+        register_figure(
+            fig_slope,
+            "Slope heuristic"
+        )
 
-        CPD_dataset1.smooth = True
+    else:
+        best_key = min(
+            f_costos,
+            key=lambda key: (
+                f_costos[key],
+                key
+            )
+        )
 
-        # smoothing sigma parameter removed
-
-        d = CPD_dataset1.distancias()
-
-        pc_detectados_dataset1 = detect(
-            d,
+    # Se asignan únicamente los parámetros escogidos por
+    # el criterio final, no los provisionales retornados
+    # por el optimizador.
+    if modo == "Gaussiano":
+        (
             CPD_dataset1.window,
-            alpha=0.05,
-            thr=0
+            CPD_dataset1.t
+        ) = (
+            int(best_key[0]),
+            int(best_key[1])
         )
 
-        if cost_enabled:
+    else:
+        CPD_dataset1.window = int(
+            best_key
+        )
 
-            fig1 = graficar_mapa_calor(
+        CPD_dataset1.last_distance_raw = None
+        CPD_dataset1.last_distance_smooth = None
+
+    # Se calcula una sola vez la curva correspondiente
+    # a los parámetros definitivamente seleccionados.
+    d = CPD_dataset1.distancias()
+
+    pc_detectados_dataset1 = detect(
+        d,
+        CPD_dataset1.window,
+        thr=0,
+        prominence_ratio=prominence_ratio
+    )
+
+    if cost_enabled:
+
+        use_heatmap = (
+            modo == "Gaussiano"
+            and t_given is None
+        )
+
+        if use_heatmap:
+            fig_cost = graficar_mapa_calor(
                 start,
                 end,
                 CPD_dataset1,
                 f_costos,
-                "Mapa de calor solo costo " + str(T),
-                path + modo + '/ gaussiana solo coste ' + name,
+                (
+                    "Heat Map of Cost "
+                ),
+                (
+                    path
+                    + modo
+                    + "/ Gaussian only cost "
+                    + name
+                ),
                 show=False,
-                best_key=best_key
+                best_key=best_key,
+                save_fig=save_fig
             )
 
-            fig2 = graficar_mapa_calor(
-                start,
-                end,
-                CPD_dataset1,
-                penalizaciones,
-                "Mapa de calor penalización " + str(T),
-                path + modo + '/ gaussiana solo penalización ' + name,
-                show=False,
-                best_key=best_key
+            register_figure(
+                fig_cost,
+                "Heat Map of Cost"
             )
 
-            fig3 = graficar_mapa_calor(
-                0,
-                0,
-                CPD_dataset1,
-                result,
-                "Mapa de calor costo " + str(T) + " regularización: " + str(round(betha, 4)),
-                'Gráficas/Heuristic_Slope/coste ' + name,
-                show=False,
-                best_key=best_key
+            if penal:
+                fig_penalty = graficar_mapa_calor(
+                    start,
+                    end,
+                    CPD_dataset1,
+                    penalizaciones,
+                    (
+                        "Heat Map of Penalty "
+                    ),
+                    (
+                        path
+                        + modo
+                        + "/ Gaussian only penalty "
+                        + name
+                    ),
+                    show=False,
+                    best_key=best_key,
+                    save_fig=save_fig
+                )
+                    
+                fig_regularized = graficar_mapa_calor(
+                        0,
+                        0,
+                        CPD_dataset1,
+                        result,
+                        (
+                            "Heat Map of Regularized Cost "
+                            + "; gamma="
+                            + str(round(gamma, 4))
+                        ),
+                        (
+                            path
+                            + "Heuristic_Slope/cost "
+                            + name
+                        ),
+                        show=False,
+                        best_key=best_key,
+                        save_fig=save_fig
+                    )
+
+                register_figure(
+                        fig_penalty,
+                        "Heat Map of Penalty"
+                    )
+                register_figure(
+                        fig_regularized,
+                        "Heat Map of Regularized Cost"
+                    )
+
+        else:
+            if modo == "Gaussiano":
+                plot_best_key = int(
+                    best_key[0]
+                )
+
+                plot_costs = {
+                    key[0]: value
+                    for key, value
+                    in f_costos.items()
+                }
+
+                if penal:
+                    plot_penalties = {
+                        key[0]: value
+                        for key, value
+                        in penalizaciones.items()
+                    }
+
+                    plot_result = {
+                        key[0]: value
+                        for key, value
+                        in result.items()
+                    }
+
+            else:
+                plot_best_key = int(
+                    best_key
+                )
+                plot_costs = f_costos
+
+                if penal:
+                    plot_penalties = penalizaciones
+                    plot_result = result
+                
+            fig_cost = graficar_dispersion_costo(
+                                                        start,
+                                                        end,
+                                                        CPD_dataset1,
+                                                        plot_costs,
+                                                        (
+                                                            "Dispersion only cost "
+                                                        ),
+                                                        (
+                                                            path
+                                                            + modo
+                                                            + "/ "
+                                                            + modo
+                                                            + " only cost "
+                                                            + name
+                                                            if path is not None
+                                                            else None
+                                                        ),
+                                                        show=False,
+                                                        object_use=True,
+                                                        best_key=plot_best_key,
+                                                        save_fig=save_fig
+                                                    )
+
+            register_figure(
+                    fig_cost,
+                    "Wasserstein Distance Unsmoothed"
             )
 
-            figuras.extend([fig1, fig2, fig3])
+            if penal:
 
-            figuras_generadas.extend([
-                "Mapa de calor costo",
-                "Mapa de calor penalización",
-                "Mapa de calor regularizado"
-            ])
+                fig_penalty = graficar_dispersion_costo(
+                                                            start,
+                                                            end,
+                                                            CPD_dataset1,
+                                                            plot_penalties,
+                                                            (
+                                                                "Dispersion only penalty "
+                                                            ),
+                                                            (
+                                                                path
+                                                                + modo
+                                                                + "/ "
+                                                                + modo
+                                                                + " only penalty "
+                                                                + name
+                                                                if path is not None
+                                                                else None
+                                                            ),
+                                                            show=False,
+                                                            object_use=True,
+                                                            best_key=plot_best_key,
+                                                            save_fig=save_fig
+                                                        )
 
-        if raw_enabled:
+                fig_regularized = (
+                    graficar_dispersion_costo(
+                        0,
+                        0,
+                        plot_best_key,
+                        plot_result,
+                        (
+                            "Dispersion regularized cost "
+                            + "; gamma="
+                            + str(round(gamma, 4))
+                        ),
+                        (
+                            path
+                            + "Heuristic_Slope/cost "
+                            + name
+                        ),
+                        show=False,
+                        object_use=False,
+                        best_key=plot_best_key,
+                        save_fig=save_fig
+                    )
+                )
 
-            fig_raw = CPD_dataset1.plot_distancias(
-                suavizada=False,
-                title="Distancia de Wasserstein sin suavizar " + str(T),
-                path=path + modo + '/ gaussiana sin suavizar ' + name,
-                show=False
-            )
+                register_figure(
+                    fig_penalty,
+                    "Dispersion only penalty"
+                )
+                register_figure(
+                    fig_regularized,
+                    "Dispersion regularized"
+                )
 
-            figuras.append(fig_raw)
+    if raw_enabled:
+        fig_raw = CPD_dataset1.plot_distancias(
+            suavizada=False,
+            title=(
+                "Wasserstein Distance "
+                "Unsmoothed "
+            ),
+            path=(
+                path
+                + modo
+                + "/ "
+                + modo
+                + " Unsmoothed "
+                + name
+            ),
+            show=False,
+            save_fig=save_fig
+        )
 
-            figuras_generadas.append(
-                "Distancia de Wasserstein sin suavizar"
-            )
+        register_figure(
+            fig_raw,
+            "Wasserstein Distance Unsmoothed"
+        )
 
-        if smooth_enabled:
+    if smooth_enabled:
+        fig_smooth = CPD_dataset1.plot_distancias(
+            suavizada=True,
+            title=(
+                "Wasserstein Distance smoothed"
+            ),
+            path=(
+                path
+                + modo
+                + "/ "
+                + modo
+                + " smoothed "
+                + name
+            ),
+            show=False,
+            save_fig=save_fig
+        )
 
-            fig_smooth = CPD_dataset1.plot_distancias(
-                suavizada=True,
-                title="Distancia de Wasserstein suavizada " + str(T),
-                path=path + modo + '/ gaussiana suavizada ' + name,
-                show=False
-            )
+        register_figure(
+            fig_smooth,
+            "Wasserstein Distance smoothed"
+        )
 
-            figuras.append(fig_smooth)
+    if summary_enabled:
+        fig_resumen = CPD_dataset1.plot_resumen(
+            cps,
+            pc_detectados_dataset1,
+            title=(
+                " General Summary of the Change Point Detection Algorithm "
+            ),
+            path=(
+                path
+                + modo
+                + "/ resumen "
+                + modo
+                + " "
+                + name
+            ),
+            show=False,
+            save_fig=save_fig
+        )
 
-            figuras_generadas.append(
-                "Distancia de Wasserstein suavizada"
-            )
+        register_figure(
+            fig_resumen,
+            "General Summary of the Change Point Detection Algorithm"
+        )
 
-        if summary_enabled:
+    print_toolbox_section(
+        "Selección final"
+    )
 
-            fig_resumen = CPD_dataset1.plot_resumen(
-                cps,
-                pc_detectados_dataset1,
-                title="Resumen general " + str(T),
-                path=path + modo + '/ resumen gaussiano ' + name,
-                show=False
-            )
-
-            figuras.append(fig_resumen)
-
-            figuras_generadas.append(
-                "Resumen general"
-            )
-
-        print_toolbox_section("Selección final")
-
+    if modo == "Gaussiano":
         print_toolbox_item(
             "Ventana óptima",
             best_key[0]
         )
-
         print_toolbox_item(
             "Retardo óptimo",
             best_key[1]
         )
-
-        print_toolbox_item(
-            "Beta",
-            betha
-        )
-
-        print_toolbox_success(
-            "Optimización finalizada"
-        )
-
     else:
-        T = len(dataset)
-
-        print_toolbox_item("Tamaño de serie", T)
-        print_toolbox_item("Penalización", penal)
-        print_toolbox_item("Codo dado", given)
-        print_toolbox_item("Codo geométrico", geom)
-
-
-        if modo == "Empírico":
-            CPD_dataset1 = EmpiricalCPD(dataset)
-        
-            start = time.time()
-
-            best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window(
-                min_w = min_w,
-                max_w = max_w,
-                penal=penal,
-                lambda_p=lambda_p,
-                join=False
-            )
-
-            end = time.time()
-
-        if modo == 'Kliep':
-            
-            CPD_dataset1 = KLIEP_CPD(dataset)
-
-            start = time.time()
-
-            best_dist, pc_detectados_dataset1, f_costos, penalizaciones = CPD_dataset1.opt_window(
-                min_w=min_w,
-                max_w=max_w,
-                penal=penal,
-                lambda_p=lambda_p,
-                join=False
-             )
-
-            end = time.time()
-
-        betha, fig_slope = CPD_dataset1.slope_heuristic_regression(
-            s_thresh,
-            f_costos,
-            penalizaciones,
-            plot=slope_enabled,
-            path='Gráficas/Heuristic_Slope/Visualización_Heuristic_Slope ' + name,
-            given=given,
-            geom=geom,
-            return_fig=True
-        )
-
-        if fig_slope is not None:
-            figuras.append(fig_slope)
-            figuras_generadas.append("Slope heuristic")
-
-        best_key, result = penalized_costs(
-            f_costos,
-            penalizaciones,
-            2 * betha
-        )
-
-        CPD_dataset1.window = best_key
-        if modo == 'Empírico':
-            CPD_dataset1.smooth = True
-            # smoothing sigma parameter removed
-
-            d = CPD_dataset1.distancias()
-
-            pc_detectados_dataset1 = detect(
-                d,
-                CPD_dataset1.window,
-                alpha=0.05,
-                thr=0,
-                emp=True
-            )
-        
-        if modo == 'Kliep':
-            pc_detectados_dataset1 = CPD_dataset1.distancias(return_cps=True)
-
-        if cost_enabled:
-
-            fig1 = graficar_dispersion_costo(
-                start,
-                end,
-                CPD_dataset1,
-                f_costos,
-                "Dispersión solo costo " + str(T),
-                path + modo + '/ ' + modo + ' solo coste ' + name,
-                show=False,
-                object_use=True
-            )
-
-            fig2 = graficar_dispersion_costo(
-                start,
-                end,
-                CPD_dataset1,
-                penalizaciones,
-                "Dispersión penalización " + str(T),
-                path + modo + '/ ' + modo + ' solo penalización ' + name,
-                show=False,
-                object_use=True
-            )
-
-            fig3 = graficar_dispersion_costo(
-                0,
-                0,
-                best_key,
-                result,
-                "Dispersión costo " + str(T) + " regularización: " + str(round(betha, 4)),
-                'Gráficas/Heuristic_Slope/coste ' + name,
-                show=False,
-                object_use=False,
-                best_key=best_key
-            )
-
-            figuras.extend([fig1, fig2, fig3])
-
-            figuras_generadas.extend([
-                "Dispersión costo",
-                "Dispersión penalización",
-                "Dispersión regularizada"
-            ])
-
-        if raw_enabled:
-
-            fig_raw = CPD_dataset1.plot_distancias(
-                suavizada=False,
-                title="Distancia de Wasserstein sin suavizar " + str(T),
-                path=path + modo + '/ ' + modo + ' sin suavizar ' + name,
-                show=False
-            )
-
-            figuras.append(fig_raw)
-
-            figuras_generadas.append(
-                "Distancia de Wasserstein sin suavizar"
-            )
-
-        if smooth_enabled:
-
-            fig_smooth = CPD_dataset1.plot_distancias(
-                suavizada=True,
-                title="Distancia de Wasserstein suavizada " + str(T),
-                path=path + modo + '/ ' + modo + ' suavizada ' + name,
-                show=False
-            )
-
-            figuras.append(fig_smooth)
-
-            figuras_generadas.append(
-                "Distancia de Wasserstein suavizada"
-            )
-
-        if summary_enabled:
-
-            fig_resumen = CPD_dataset1.plot_resumen(
-                cps,
-                pc_detectados_dataset1,
-                title="Resumen general " + str(T),
-                path=path + modo + '/ resumen ' + modo + ' ' + name,
-                show=False
-            )
-
-            figuras.append(fig_resumen)
-
-            figuras_generadas.append(
-                "Resumen general"
-            )
-
-        print_toolbox_section("Selección final")
-
         print_toolbox_item(
             "Ventana óptima",
             best_key
         )
 
+    if penal:
         print_toolbox_item(
-            "Beta",
-            betha
+            "Penalización mínima",
+            beta
+        )
+        print_toolbox_item(
+            "Gamma final",
+            gamma
         )
 
-        print_toolbox_success(
-            "Optimización finalizada"
-        )
+    print_toolbox_item(
+        "Tiempo de búsqueda",
+        round(end - start, 3)
+    )
 
-    
+    print_toolbox_success(
+        "Optimización finalizada"
+    )
 
     if figuras_generadas:
+        print_toolbox_section(
+            "Figuras preparadas"
+        )
 
-        print_toolbox_section("Figuras preparadas")
-
-        for elemento in figuras_generadas:
-
+        for description in figuras_generadas:
             print_toolbox_item(
                 "Figura",
-                elemento
+                description
             )
 
     if figuras:
         plt.show()
 
-    return metrics(
+    metric_result = metrics(
         cps,
         pc_detectados_dataset1,
         thr_dist,
         T
     )
+
+    if return_cps_list:
+        return (
+            metric_result,
+            pc_detectados_dataset1
+        )
+
+    return metric_result
 
 def hallar_pendiente(penals_arr, costs_arr, s_thresh=None, given=True, plot=False):
 
@@ -624,7 +936,7 @@ def hallar_pendiente(penals_arr, costs_arr, s_thresh=None, given=True, plot=Fals
         raise ValueError("No hay suficientes puntos para regresión.")
 
     m, _ = np.polyfit(x_filtrado, y_filtrado, 1)
-    return abs(m)
+    return m
 
 
 def suavizar_media_movil(y, window=5, preserve_edges=3):

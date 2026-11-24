@@ -42,19 +42,20 @@ def sample_invertible_ma2():
             return np.array([theta1, theta2])
 
 #La función genera la serie de tiempo ARMA descrita en el artículo de revisión de métodos de detección de puntos de cambio
+
 def ar2_noise(
     T=2000,
+    n_segmentos=16,
     phi=(0.3, 0.5),
     theta=(0.0, 0.0),
     random_phi=False,
     random_theta=False,
-    #phi_range=(-0.9, 0.9),
-    #theta_range=(-0.9, 0.9),
     min_seg=50,
     max_seg=200,
     base_mean=0.0,
     random_mean=True,
     mean_range=(-1.0, 1.0),
+    min_mean_diff=0.0,
     base_std=0.5,
     random_std=True,
     std_range=(0.2, 1.2),
@@ -65,6 +66,57 @@ def ar2_noise(
     if seed is not None:
         np.random.seed(seed)
 
+    if not (n_segmentos * min_seg <= T <= n_segmentos * max_seg):
+        raise ValueError(
+            "T debe estar entre n_segmentos * min_seg y "
+            "n_segmentos * max_seg."
+        )
+
+    if min_mean_diff < 0:
+        raise ValueError("min_mean_diff debe ser no negativo.")
+
+    if not random_mean and n_segmentos > 1 and min_mean_diff > 0:
+        raise ValueError(
+            "No puede imponerse una diferencia de medias "
+            "con random_mean=False."
+        )
+
+    # Generación de longitudes
+    longitudes = []
+    restante = T
+
+    for i in range(n_segmentos - 1):
+
+        seg_restantes = n_segmentos - i - 1
+
+        minimo_factible = max(
+            min_seg,
+            restante - seg_restantes * max_seg
+        )
+
+        maximo_factible = min(
+            max_seg,
+            restante - seg_restantes * min_seg
+        )
+
+        L = np.random.randint(
+            minimo_factible,
+            maximo_factible + 1
+        )
+
+        longitudes.append(L)
+        restante -= L
+
+    longitudes.append(restante)
+
+    # Intervalo efectivo de medias
+    def transformar_media(z):
+        return z + np.exp(-abs(z))
+
+    mu_min = transformar_media(mean_range[0])
+    mu_max = transformar_media(mean_range[1])
+
+    # Generación del proceso
     x = np.zeros(T)
     eps = np.zeros(T)
 
@@ -74,16 +126,36 @@ def ar2_noise(
     phi_t = np.array(phi)
     theta_t = np.array(theta)
 
-    while t <= T - min_seg:
-        seg_len = np.random.randint(min_seg, max_seg + 1)
-        end = min(t + seg_len, T)
+    media_anterior = None
 
+    for i, L in enumerate(longitudes):
+
+        end = t + L
+
+        # Media del segmento
         if random_mean:
             x_mu = np.random.uniform(*mean_range)
-            mu = x_mu + np.exp(-abs(x_mu))
+            mu = transformar_media(x_mu)
+
+            if media_anterior is not None:
+                if abs(mu - media_anterior) < min_mean_diff:
+
+                    mu = media_anterior + min_mean_diff
+
+                    if mu > mu_max:
+                        mu = media_anterior - min_mean_diff
+
+                    if mu < mu_min:
+                        raise ValueError(
+                            "No existe una media factible para "
+                            "la separación solicitada."
+                        )
         else:
             mu = base_mean
 
+        media_anterior = mu
+
+        # Desviación estándar del segmento
         if random_std:
             sigma = np.random.uniform(*std_range)
         else:
@@ -95,25 +167,26 @@ def ar2_noise(
         if random_theta:
             theta_t = sample_invertible_ma2()
 
-        eps[t:end] = np.random.normal(mu, sigma, end - t)
+        eps[t:end] = np.random.normal(mu, sigma, L)
 
-        if t not in cps and t != 0:
+        if i > 0:
             cps.append(t)
-        if end not in cps and end != T:
-            cps.append(end)
 
-        for i in range(max(t, 2), end):
-            x[i] = (
-                phi_t[0] * x[i - 1]
-                + phi_t[1] * x[i - 2]
-                + eps[i]
-                + theta_t[0] * eps[i - 1]
-                + theta_t[1] * eps[i - 2]
+        for j in range(max(t, 2), end):
+            x[j] = (
+                phi_t[0] * x[j - 1]
+                + phi_t[1] * x[j - 2]
+                + eps[j]
+                + theta_t[0] * eps[j - 1]
+                + theta_t[1] * eps[j - 2]
             )
 
         t = end
 
-    outlier_idx = np.arange(outlier_interval, T, outlier_interval)
+    # Incorporación de outliers
+    outlier_idx = np.arange(
+        outlier_interval, T, outlier_interval
+    )
 
     eps[outlier_idx] += np.random.normal(
         0.0,
@@ -126,230 +199,6 @@ def ar2_noise(
     return x, sorted(cps), outlier_idx
 
 
-def samples_200_arma(
-    seed,
-    N=200,
-    thr_dist=30,
-    T=2000,
-    phi=(0.3, 0.5),
-    theta=(0.0, 0.0),
-    random_phi=False,
-    random_theta=False,
-    min_seg=50,
-    max_seg=150,
-    base_mean=0.0,
-    random_mean=True,
-    mean_range=(-1.0, 1.0),
-    base_std=0.5,
-    random_std=True,
-    std_range=(0.2, 1.2),
-    outlier_interval=200,
-    outlier_scale=6.0,
-    s_thresh=0,
-    seed2=None,
-    tail=False,
-    tail_list=None,
-    given=True,
-    geom=True,
-    visualization=None
-):
-
-    if tail_list is None:
-        tail_list = [N]
-
-    if visualization is None:
-        visualization = {}
-
-    summary_enabled = visualization.get("summary", False)
-    raw_enabled = visualization.get("raw_distance", False)
-    smooth_enabled = visualization.get("smooth_distance", False)
-    cost_enabled = visualization.get("cost", False)
-    slope_enabled = visualization.get("slope", False)
-
-    print_toolbox_header("Serie sintética ARMA")
-    print_toolbox_item("Experimentos totales", N)
-
-
-    np.random.seed(seed)
-
-    metricas_gauss = []
-    metricas_emp = []
-
-    ejecutados = 0
-
-    for i in range(N):
-
-        seed_actual = None if seed2 is None else seed2 + i
-
-        dataset1, cps_ar, outliers_ar = ar2_noise(
-            T,
-            phi,
-            theta,
-            random_phi,
-            random_theta,
-            min_seg,
-            max_seg,
-            base_mean,
-            random_mean,
-            mean_range,
-            base_std,
-            random_std,
-            std_range,
-            outlier_interval,
-            outlier_scale,
-            seed_actual
-        )
-
-        ejecutar = (not tail) or ((i + 1) in tail_list)
-    
-        if not ejecutar:
-            continue
-
-        ejecutados += 1
-
-        print_toolbox_header(f"Experimento {i + 1}/{N}")
-
-        print_toolbox_item("Longitud de serie", T)
-
-        print_toolbox_item(
-            "Semilla del experimento",
-            seed_actual if seed_actual is not None else "Aleatoria"
-        )
-
-        print_toolbox_item(
-            "Puntos de cambio reales",
-            len(cps_ar)
-        )
-
-
-        met_dataset1_gauss = best_params_sh(
-            dataset1,
-            cps_ar,
-            s_thresh=s_thresh,
-            penal=True,
-            lambda_p=0,
-            given=given,
-            geom=geom,
-            visualization={
-                "summary": summary_enabled,
-                "raw_distance": raw_enabled,
-                "smooth_distance": smooth_enabled,
-                "cost": cost_enabled,
-                "slope": slope_enabled
-            },
-            thr_dist=thr_dist
-        )
-
-        met_dataset1_emp = best_params_sh(
-            dataset1,
-            cps_ar,
-            s_thresh=s_thresh,
-            penal=True,
-            lambda_p=0,
-            modo="Empírico",
-            given=given,
-            geom=geom,
-            visualization={
-                "summary": summary_enabled,
-                "raw_distance": raw_enabled,
-                "smooth_distance": smooth_enabled,
-                "cost": cost_enabled,
-                "slope": slope_enabled
-            },
-            thr_dist=thr_dist
-        )
-        
-        print_toolbox_section("Resumen de métricas")
-
-        print_metrics_block(
-            "Gaussiano",
-            met_dataset1_gauss[0]
-        )
-
-        print_metrics_block(
-            "Empírico",
-            met_dataset1_emp[0]
-        )
-
-        metricas_gauss.append(
-            list(met_dataset1_gauss[0].values())
-        )
-
-        metricas_emp.append(
-            list(met_dataset1_emp[0].values())
-        )
-
-        print_toolbox_success(
-            f"Experimento {i + 1}/{N} finalizado"
-        )
-
-    print_toolbox_header("Resumen global")
-
-    print_toolbox_item(
-        "Experimentos ejecutados",
-        ejecutados
-    )
-
-    print_toolbox_item(
-        "Experimentos solicitados",
-        N
-    )
-    
-    return met_dataset1_gauss, met_dataset1_emp
-
-def samples_200_sin(tran_mat, exp, pc_params, min_w, n, penal, lambda_p, N=200, w=30, t=0, m=0, seed=None, thr_dist=30,
-                     sigma_amp = 0.1, sigma_freq = 0.003, sigma_fase = 0.05, sigma_pend = 0.0,
-                     sigma_ruido = 0.8):
-    if seed is not None:
-        np.random.seed(seed)
-
-    print_toolbox_header("Serie sintética periódica")
-    print_toolbox_item("Experimentos totales", N)
-
-    amplitud_base, frecuencia_base, fase_base = pc_params[0]
-    pendiente_base = 0
-
-    metricas_gauss = []
-    metricas_emp = []
-
-    for i in range(N):
-        print_toolbox_header(f"Experimento {i + 1}/{N}")
-
-        seed_actual = None if seed is None else seed + i
-        cps, cambios, clusters_cps = serie_pc(tran_mat, [exp] * 4, pc_params, min_w, n, seed=seed_actual)
-
-        cps_principales = {'S1': [j for j in cps for i in range(3)]}
-        cambios_cp = {'S1': cambios}
-        datos_clustering, subgrupos = generar_series_pc(
-            1, cps[-1] + min_w, 1, 1, amplitud_base,
-            frecuencia_base, pendiente_base, fase_base, sigma_amp, sigma_freq,
-            sigma_pend, sigma_ruido, cps_principales=cps_principales, cambios_cp=cambios_cp, aleatorio=False, graficar=False
-        )
-
-        serie_ruido = datos_clustering[0]
-        T = len(serie_ruido)
-
-        PC_ruido = CPD(serie_ruido, window=w, t=t, m=m, medias=True, smooth=True)
-        distancias, pc_detectados_gauss, espacio = PC_ruido.opt_window_t(max_w=T // 10, penal=penal, lambda_p=lambda_p)
-        met_gauss, values_gauss = metrics(cps, pc_detectados_gauss, thr_dist, T)
-        metricas_gauss.append(list(met_gauss.values()))
-
-        PC_ruido_emp = EmpiricalCPD(serie_ruido)
-        best_dist, pc_detectados_emp, espacio = PC_ruido_emp.opt_window(max_w=T // 10, penal=penal, lambda_p=lambda_p)
-        met_emp, values_emp = metrics(cps, pc_detectados_emp, thr_dist, T)
-        metricas_emp.append(list(met_emp.values()))
-
-        print_toolbox_section("Resultados")
-        print_metrics_block("Gaussiano", met_gauss)
-        print_metrics_block("Empírico", met_emp)
-        print_toolbox_success(f"Experimento {i + 1}/{N} finalizado")
-
-    print_toolbox_header("Resumen global")
-    print_toolbox_item("Experimentos ejecutados", N)
-
-    return metricas_gauss, metricas_emp
-
-
 def generar_experimento_ar1(
     N,
     n_segmentos,
@@ -357,40 +206,60 @@ def generar_experimento_ar1(
     max_sep,
     betas=(0.8, -0.8),
     sigma_y=1.0,
-    seed=None
+    seed=None,
+    punto_cambio=None,
+    A=0
 ):
 
     rng = np.random.default_rng(seed)
 
-  
-    longitudes = []
-    restante = N
+    if punto_cambio is not None:
+        if n_segmentos != 2:
+            raise ValueError(
+                "punto_cambio solo está soportado cuando n_segmentos == 2."
+            )
+        if not (0 < punto_cambio < N):
+            raise ValueError(
+                "punto_cambio debe estar estrictamente entre 0 y N."
+            )
 
-    for i in range(n_segmentos - 1):
+        longitudes = [punto_cambio, N - punto_cambio]
 
-        seg_restantes = n_segmentos - i - 1
+    else:
 
-        minimo_factible = max(
-            min_sep,
-            restante - seg_restantes * max_sep
-        )
+        if N < n_segmentos * min_sep or N > n_segmentos * max_sep:
+            raise ValueError(
+                "N debe estar entre n_segmentos * min_sep y "
+                "n_segmentos * max_sep."
+            )
 
-        maximo_factible = min(
-            max_sep,
-            restante - seg_restantes * min_sep
-        )
+        longitudes = []
+        restante = N
 
-        L = rng.integers(
-            minimo_factible,
-            maximo_factible + 1
-        )
+        for i in range(n_segmentos - 1):
 
-        longitudes.append(L)
-        restante -= L
+            seg_restantes = n_segmentos - i - 1
 
-    longitudes.append(restante)
+            minimo_factible = max(
+                min_sep,
+                restante - seg_restantes * max_sep
+            )
 
-  
+            maximo_factible = min(
+                max_sep,
+                restante - seg_restantes * min_sep
+            )
+
+            L = rng.integers(
+                minimo_factible,
+                maximo_factible + 1
+            )
+
+            longitudes.append(L)
+            restante -= L
+
+        longitudes.append(restante)
+
     betas_segmentos = [rng.choice(betas)]
 
     for _ in range(n_segmentos - 1):
@@ -404,7 +273,6 @@ def generar_experimento_ar1(
             rng.choice(candidatos)
         )
 
-  
     y = np.zeros(N)
 
     cps = []
@@ -412,7 +280,7 @@ def generar_experimento_ar1(
 
     pos = 0
 
-    y[0] = rng.normal(0, sigma_y)
+    y[0] = rng.normal(A, sigma_y)
 
     for i, (L, beta) in enumerate(
         zip(longitudes, betas_segmentos)
@@ -440,7 +308,7 @@ def generar_experimento_ar1(
         for t in range(max(1, inicio), fin):
 
             y[t] = (
-                beta * y[t - 1]
+                (beta * y[t - 1])
                 + rng.normal(0, sigma_eps)
             )
 
@@ -450,8 +318,7 @@ def generar_experimento_ar1(
         y,
         np.array(cps),
         segmentos
- )
-
+    )
 
 def generar_experimento_senoidal(
     N,
@@ -462,39 +329,58 @@ def generar_experimento_senoidal(
     sigma_eps=0.5,
     omegas=(np.pi/10, np.pi/5),
     fase_aleatoria=False,
-    seed=None
+    seed=None,
+    punto_cambio=None
 ):
 
     rng = np.random.default_rng(seed)
 
- 
-    longitudes = []
-    restante = N
+    if punto_cambio is not None:
+        if n_segmentos != 2:
+            raise ValueError(
+                "punto_cambio solo está soportado cuando n_segmentos == 2."
+            )
+        if not (0 < punto_cambio < N):
+            raise ValueError(
+                "punto_cambio debe estar estrictamente entre 0 y N."
+            )
 
-    for i in range(n_segmentos - 1):
+        longitudes = [punto_cambio, N - punto_cambio]
 
-        seg_restantes = n_segmentos - i - 1
+    else:
 
-        minimo_factible = max(
-            min_sep,
-            restante - seg_restantes * max_sep
-        )
+        if N < n_segmentos * min_sep or N > n_segmentos * max_sep:
+            raise ValueError(
+                "N debe estar entre n_segmentos * min_sep y "
+                "n_segmentos * max_sep."
+            )
 
-        maximo_factible = min(
-            max_sep,
-            restante - seg_restantes * min_sep
-        )
+        longitudes = []
+        restante = N
 
-        L = rng.integers(
-            minimo_factible,
-            maximo_factible + 1
-        )
+        for i in range(n_segmentos - 1):
 
-        longitudes.append(L)
-        restante -= L
+            seg_restantes = n_segmentos - i - 1
 
-    longitudes.append(restante)
+            minimo_factible = max(
+                min_sep,
+                restante - seg_restantes * max_sep
+            )
 
+            maximo_factible = min(
+                max_sep,
+                restante - seg_restantes * min_sep
+            )
+
+            L = rng.integers(
+                minimo_factible,
+                maximo_factible + 1
+            )
+
+            longitudes.append(L)
+            restante -= L
+
+        longitudes.append(restante)
 
     omegas_segmentos = [rng.choice(omegas)]
 
@@ -560,59 +446,49 @@ def generar_experimento_senoidal(
         segmentos
     )
 
-
 def generar_experimento_ar2(
     N,
     n_segmentos,
     min_sep,
     max_sep,
     sigma=0.5,
-    seed=None
+    seed=None,
+    punto_cambio=None,
+    A = 0
 ):
 
     rng = np.random.default_rng(seed)
 
+    if punto_cambio is not None:
+        if n_segmentos != 2:
+            raise ValueError(
+                "punto_cambio solo está soportado cuando n_segmentos == 2."
+            )
+        if not (0 < punto_cambio < N):
+            raise ValueError(
+                "punto_cambio debe estar estrictamente entre 0 y N."
+            )
+        longitudes = [punto_cambio, N - punto_cambio]
 
-    if N < n_segmentos * min_sep:
-        raise ValueError(
-            "N es demasiado pequeño para acomodar "
-            "todos los segmentos."
-        )
+    else:
+        if N < n_segmentos * min_sep or N > n_segmentos * max_sep:
+            raise ValueError(
+                "N debe estar entre n_segmentos * min_sep y "
+                "n_segmentos * max_sep para poder acomodar todos los segmentos."
+            )
 
-    if N > n_segmentos * max_sep:
-        raise ValueError(
-            "N es demasiado grande para los límites "
-            "de longitud especificados."
-        )
+        longitudes = []
+        restante = N
 
- 
-    longitudes = []
-    restante = N
+        for i in range(n_segmentos - 1):
+            seg_restantes = n_segmentos - i - 1
+            minimo_factible = max(min_sep, restante - seg_restantes * max_sep)
+            maximo_factible = min(max_sep, restante - seg_restantes * min_sep)
+            L = rng.integers(minimo_factible, maximo_factible + 1)
+            longitudes.append(L)
+            restante -= L
 
-    for i in range(n_segmentos - 1):
-
-        seg_restantes = n_segmentos - i - 1
-
-        minimo_factible = max(
-            min_sep,
-            restante - seg_restantes * max_sep
-        )
-
-        maximo_factible = min(
-            max_sep,
-            restante - seg_restantes * min_sep
-        )
-
-        L = rng.integers(
-            minimo_factible,
-            maximo_factible + 1
-        )
-
-        longitudes.append(L)
-        restante -= L
-
-    longitudes.append(restante)
-
+        longitudes.append(restante)
 
     regimen_A = (1.0, -0.8)
     regimen_B = (-1.0, -0.8)
@@ -620,9 +496,7 @@ def generar_experimento_ar2(
     regimen_actual = rng.choice([0, 1])
 
     parametros = []
-
     for _ in range(n_segmentos):
-
         if regimen_actual == 0:
             parametros.append(regimen_A)
             regimen_actual = 1
@@ -630,22 +504,15 @@ def generar_experimento_ar2(
             parametros.append(regimen_B)
             regimen_actual = 0
 
-
     y = np.zeros(N)
-
-    # Inicialización
-    y[0] = rng.normal(0, sigma)
-    y[1] = rng.normal(0, sigma)
+    y[0] = rng.normal(A, sigma)
+    y[1] = rng.normal(A, sigma)
 
     cps = []
     segmentos = []
-
     pos = 0
 
-    for idx, (L, (phi1, phi2)) in enumerate(
-        zip(longitudes, parametros)
-    ):
-
+    for idx, (L, (phi1, phi2)) in enumerate(zip(longitudes, parametros)):
         inicio = pos
         fin = pos + L
 
@@ -662,16 +529,9 @@ def generar_experimento_ar2(
             cps.append(inicio)
 
         t_inicio = max(inicio, 2)
-
         for t in range(t_inicio, fin):
-
             eps = rng.normal(0, sigma)
-
-            y[t] = (
-                phi1 * y[t - 1]
-                + phi2 * y[t - 2]
-                + eps
-            )
+            y[t] = (phi1 * y[t - 1] + phi2 * y[t - 2]) + eps
 
         pos = fin
 
