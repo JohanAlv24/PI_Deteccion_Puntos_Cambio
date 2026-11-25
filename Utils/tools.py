@@ -5,10 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from Algoritmo_Gaussiano.cpd import CPD
 from Algoritmo_Empiricas.Empirical_CPD import EmpiricalCPD
-from Algoritmo_KLIEP.kliep_cpd import KLIEP_CPD
 from Utils.detection import detect
 from Utils.metrics_sup import metrics
-from scipy.interpolate import UnivariateSpline
 
 
 def _formatear_valor(value, precision=4):

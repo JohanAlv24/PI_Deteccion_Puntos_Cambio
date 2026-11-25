@@ -1,0 +1,36 @@
+\begin{table}[!htbp]
+    \centering
+    \caption{Mean performance over the \(B=200\) simulated realizations for Dataset~1 (switching AR(1) coefficient).}
+    \label{tab:mean_metrics_dataset1}
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \renewcommand{\arraystretch}{1.08}
+    \begin{tabular}{@{}clcccc@{}}
+        \toprule
+        \(\boldsymbol{n}\) & \textbf{Method} & \textbf{Precision} & \textbf{Recall} & \(\boldsymbol{F_1}\) & \(\boldsymbol{\overline{d}(\delta)}\) \\
+        \midrule
+        25 & Gaussian & 0.3889 & \textbf{0.9482} & \textbf{0.5511} & \textbf{5.4964} \\
+         & Empirical & 0.3318 & 0.9479 & 0.4913 & 7.3581 \\
+         & Roerich--KL & \textbf{0.4253} & 0.6484 & 0.5128 & 8.9137 \\
+         & Window--RBF & 0.3255 & 0.9455 & 0.4841 & 7.7072 \\
+        \addlinespace[2pt]
+        30 & Gaussian & \textbf{0.4754} & \textbf{0.9142} & \textbf{0.6248} & \textbf{5.7687} \\
+         & Empirical & 0.3840 & 0.8913 & 0.5362 & 8.2489 \\
+         & Roerich--KL & 0.4681 & 0.5808 & 0.5173 & 9.3084 \\
+         & Window--RBF & 0.3696 & 0.8876 & 0.5216 & 8.8658 \\
+        \addlinespace[2pt]
+        40 & Gaussian & \textbf{0.6369} & \textbf{0.9003} & \textbf{0.7451} & \textbf{6.0659} \\
+         & Empirical & 0.4407 & 0.7737 & 0.5610 & 9.5529 \\
+         & Roerich--KL & 0.4993 & 0.4718 & 0.4839 & 9.7196 \\
+         & Window--RBF & 0.4215 & 0.7608 & 0.5422 & 9.7128 \\
+        \addlinespace[2pt]
+        50 & Gaussian & \textbf{0.7782} & \textbf{0.8903} & \textbf{0.8294} & \textbf{6.3109} \\
+         & Empirical & 0.4516 & 0.6403 & 0.5289 & 10.0349 \\
+         & Roerich--KL & 0.4800 & 0.3684 & 0.4156 & 10.2082 \\
+         & Window--RBF & 0.4368 & 0.6339 & 0.5168 & 9.7982 \\
+        \bottomrule
+    \end{tabular}
+    \begin{flushleft}
+        \footnotesize \textit{Note:} Bold entries indicate the best mean value among the methods at the same window length. Larger values are preferred for precision, recall, and \(F_1\), whereas a smaller value is preferred for \(\overline{d}(\delta)\). The reported \(F_1\) is the average of the scores computed separately for each realization.
+    \end{flushleft}
+\end{table}

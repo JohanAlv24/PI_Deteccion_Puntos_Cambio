@@ -1,0 +1,36 @@
+\begin{table}[!htbp]
+    \centering
+    \caption{Mean performance over the \(B=200\) simulated realizations for Dataset~5 (altering autocorrelation).}
+    \label{tab:mean_metrics_dataset5}
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \renewcommand{\arraystretch}{1.08}
+    \begin{tabular}{@{}clcccc@{}}
+        \toprule
+        \(\boldsymbol{n}\) & \textbf{Method} & \textbf{Precision} & \textbf{Recall} & \(\boldsymbol{F_1}\) & \(\boldsymbol{\overline{d}(\delta)}\) \\
+        \midrule
+        30 & Gaussian & \textbf{0.2977} & 0.9270 & \textbf{0.4451} & 6.4672 \\
+         & Empirical & 0.2862 & 0.8935 & 0.4244 & \textbf{5.9252} \\
+         & Roerich--KL & 0.2851 & 0.7625 & 0.4144 & 6.6575 \\
+         & Window--RBF & 0.2286 & \textbf{0.9395} & 0.3659 & 6.1013 \\
+        \addlinespace[2pt]
+        50 & Gaussian & \textbf{0.5139} & \textbf{0.8255} & \textbf{0.6212} & 7.6145 \\
+         & Empirical & 0.4828 & 0.7700 & 0.5755 & 6.5158 \\
+         & Roerich--KL & 0.4401 & 0.6685 & 0.5294 & 6.3748 \\
+         & Window--RBF & 0.3564 & 0.7865 & 0.4869 & \textbf{6.0259} \\
+        \addlinespace[2pt]
+        80 & Gaussian & \textbf{0.6506} & \textbf{0.7595} & \textbf{0.6984} & 8.4273 \\
+         & Empirical & 0.6162 & \textbf{0.7595} & 0.6780 & 7.3502 \\
+         & Roerich--KL & 0.6189 & 0.5970 & 0.6058 & 6.0052 \\
+         & Window--RBF & 0.5864 & 0.7270 & 0.6436 & \textbf{5.3800} \\
+        \addlinespace[2pt]
+        100 & Gaussian & 0.6931 & 0.6955 & 0.6929 & 8.8534 \\
+         & Empirical & 0.6988 & \textbf{0.7125} & 0.7032 & 7.6096 \\
+         & Roerich--KL & 0.6786 & 0.5390 & 0.5980 & 5.6427 \\
+         & Window--RBF & \textbf{0.7208} & 0.6945 & \textbf{0.7037} & \textbf{5.2714} \\
+        \bottomrule
+    \end{tabular}
+    \begin{flushleft}
+        \footnotesize \textit{Note:} Bold entries indicate the best mean value among the methods at the same window length. Larger values are preferred for precision, recall, and \(F_1\), whereas a smaller value is preferred for \(\overline{d}(\delta)\). The reported \(F_1\) is the average of the scores computed separately for each realization.
+    \end{flushleft}
+\end{table}
