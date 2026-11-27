@@ -1243,13 +1243,6 @@ def grafica_comparativa_wasserstein_serie(comparaciones, title):
     plt.show()
 
 
-import warnings
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-
-
 def plot_boxplots(
     datos,
     nombres,
