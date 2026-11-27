@@ -1024,88 +1024,533 @@ def detectar_codo(penals_arr, costs_arr, s=None, geom=True):
     return idx_codo
 
 
-'''
-def detectar_codo_por_estabilizacion(
-    x,
-    y,
-    q=0.10,
-    min_points=5,
-    usar_valor_absoluto=True,
-    plot=False
+
+def generar_tabla_desde_diccionarios(
+    lista_dicts,
+    lista_nombres,
+    columnas_keys,
+    nombre_columna_id="Method"
 ):
-    idx = np.argsort(x)
-    x = x[idx]
-    y = y[idx]
+    """
+    Genera una tabla con una fila por método.
 
-    if len(x) <= min_points:
-        raise ValueError("No hay suficientes puntos para detectar el codo.")
+    Cada elemento de lista_dicts debe ser una lista de diccionarios
+    con las mismas llaves. Para cada columna se calcula el promedio
+    de los valores encontrados en dichos diccionarios.
+    """
 
-    pendientes = []
-    x_reg = []
+    filas = []
 
-    for i in range(len(x) - min_points):
-        x_sub = x[i:]
-        y_sub = y[i:]
+    for nombre, diccionarios in zip(
+        lista_nombres,
+        lista_dicts
+    ):
+        fila = {
+            nombre_columna_id: nombre
+        }
 
-        m, _ = np.polyfit(x_sub, y_sub, 1)
+        for columna in columnas_keys:
+            valores = [
+                diccionario.get(
+                    columna,
+                    np.nan
+                )
+                for diccionario in diccionarios
+            ]
 
-        if usar_valor_absoluto:
-            m = abs(m)
+            valores = pd.to_numeric(
+                pd.Series(valores),
+                errors="coerce"
+            )
 
-        pendientes.append(m)
-        x_reg.append(x[i])
+            fila[columna] = (
+                valores.mean()
+                if valores.notna().any()
+                else np.nan
+            )
 
-    pendientes = np.array(pendientes)
-    x_reg = np.array(x_reg)
+        filas.append(fila)
 
-    m_min = pendientes.min()
-    m_max = pendientes.max()
+    return pd.DataFrame(filas)
 
-    banda_sup = m_min + q * (m_max - m_min)
 
-    idx_codo = np.argmax(pendientes <= banda_sup)
+def grafica_comparativa_wasserstein_serie(comparaciones, title):
+    fig, axes = plt.subplots(
+        2,
+        2,
+        figsize=(16, 10)
+    )
 
-    x_codo = x_reg[idx_codo]
-    pendiente_codo = pendientes[idx_codo]
+    axes = axes.flatten()
 
-    if plot:
-        fig, ax = plt.subplots(figsize=(10, 5))
+    for ax, (
+        serie,
+        wasserstein,
+        window,
+        titulo,
+        cps_originales,
+        cps_detectados
+    ) in zip(axes, comparaciones):
+
+        serie = np.asarray(
+            serie,
+            dtype=np.float64
+        )
+
+        wasserstein = np.asarray(
+            wasserstein,
+            dtype=np.float64
+        )
+
+        cps_originales = np.atleast_1d(
+            cps_originales
+        )
+
+        cps_detectados = np.atleast_1d(
+            cps_detectados
+        )
+
+        # Índices de la serie original
+        x_serie = np.arange(len(serie))
+
+        # Correspondencia de Wasserstein con la serie original
+        x_wasserstein = (
+            np.arange(len(wasserstein))
+            + window
+        )
+
+        # Segundo eje vertical
+        ax_wasserstein = ax.twinx()
 
         ax.plot(
-            x_reg,
-            pendientes,
-            marker='o',
-            label='Pendientes iterativas'
+            x_serie,
+            serie,
+            color="#2878B5",
+            linewidth=1.2,
+            alpha=0.75,
+            label="Serie original"
         )
 
-        ax.axhline(
-            banda_sup,
-            linestyle='--',
-            label=f'Banda q={q}'
+        ax_wasserstein.plot(
+            x_wasserstein,
+            wasserstein,
+            color="#E87500",
+            linewidth=2.2,
+            alpha=0.9,
+            label="Distancia de Wasserstein"
         )
 
-        ax.axvline(
-            x_codo,
-            linestyle=':',
-            linewidth=2,
-            label=f'Codo detectado = {x_codo:.2f}'
+        # Puntos de cambio originales
+        for i, cp in enumerate(cps_originales):
+            ax.axvline(
+                x=cp,
+                color="#C62828",
+                linestyle="--",
+                linewidth=2.2,
+                alpha=0.85,
+                label=(
+                    "Punto de cambio real"
+                    if i == 0
+                    else None
+                )
+            )
+
+        # Puntos de cambio detectados
+        for i, cp in enumerate(cps_detectados):
+            ax.axvline(
+                x=cp,
+                color="#2E7D32",
+                linestyle=":",
+                linewidth=2.4,
+                alpha=0.95,
+                label=(
+                    "Punto de cambio detectado"
+                    if i == 0
+                    else None
+                )
+            )
+
+        ax.set_title(
+            titulo,
+            fontsize=13,
+            fontweight="bold"
         )
 
-        ax.scatter(
-            x_codo,
-            pendiente_codo,
-            s=100,
-            zorder=5
+        ax.set_xlabel("Índice temporal")
+
+        ax.set_ylabel(
+            "Serie de tiempo",
+            color="#2878B5"
         )
 
-        ax.set_xlabel("Penalización inicial de regresión")
-        ax.set_ylabel("Pendiente absoluta")
+        ax_wasserstein.set_ylabel(
+            "Distancia de Wasserstein",
+            color="#E87500"
+        )
 
-        ax.set_title("Estabilización de pendientes")
+        ax.tick_params(
+            axis="y",
+            labelcolor="#2878B5"
+        )
 
-        ax.grid(True)
-        ax.legend()
+        ax_wasserstein.tick_params(
+            axis="y",
+            labelcolor="#E87500"
+        )
 
-        plt.show()
+        ax.set_xlim(
+            0,
+            len(serie) - 1
+        )
 
-    return idx_codo'''
+        ax.grid(
+            alpha=0.25,
+            linestyle="--"
+        )
+
+        # Combinar las leyendas de ambos ejes
+        handles_serie, labels_serie = (
+            ax.get_legend_handles_labels()
+        )
+
+        handles_wasserstein, labels_wasserstein = (
+            ax_wasserstein.get_legend_handles_labels()
+        )
+
+        ax.legend(
+            handles_serie + handles_wasserstein,
+            labels_serie + labels_wasserstein,
+            frameon=True,
+            fontsize=9,
+            loc="best"
+        )
+
+    # Ocultar cuadros sobrantes si se proporcionan menos de cuatro
+    for ax in axes[len(comparaciones):]:
+        ax.set_visible(False)
+
+    fig.suptitle(
+        title,
+        fontsize=17,
+        fontweight="bold",
+        y=0.99
+    )
+
+    plt.tight_layout(
+        rect=[0, 0, 1, 0.96]
+    )
+
+    plt.show()
+
+
+import warnings
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+def plot_boxplots(
+    datos,
+    nombres,
+    titulo=None,
+    ylabel="Value",
+    xlabel="Method",
+    figsize=(8.4, 4.8),
+    palette=None,
+    hatches=None,
+    show_points=True,
+    point_size=16,
+    point_alpha=0.50,
+    jitter=0.04,
+    ylim=None,
+    separator_after=2,
+    save_path=None,
+    dpi=300,
+    show=True
+):
+
+
+    if len(datos) != len(nombres):
+        raise ValueError(
+            "The number of datasets must match the number of labels."
+        )
+
+    # ---------------------------------------------------------
+    # Limpieza de los datos
+    # ---------------------------------------------------------
+    datos_limpios = []
+    nombres_validos = []
+    indices_validos = []
+
+    for indice, (valores, nombre) in enumerate(
+        zip(datos, nombres)
+    ):
+        arr = pd.to_numeric(
+            pd.Series(valores),
+            errors="coerce"
+        ).to_numpy(dtype=float)
+
+        arr = arr[np.isfinite(arr)]
+
+        if arr.size == 0:
+            warnings.warn(
+                f"Dataset '{nombre}' contains no valid observations."
+            )
+            continue
+
+        datos_limpios.append(arr)
+        nombres_validos.append(nombre)
+        indices_validos.append(indice)
+
+    if not datos_limpios:
+        raise ValueError(
+            "No valid observations are available for plotting."
+        )
+
+    # ---------------------------------------------------------
+    # Paleta recomendada
+    # ---------------------------------------------------------
+    default_colors = [
+        "#2A9D8F",  # Gaussian optimizado
+        "#4C72B0",  # Empirical optimizado
+        "#9FD3C7",  # Gaussian con ventana fija
+        "#AFC1DE",  # Empirical con ventana fija
+        "#D9A441",  # Roerich-KL
+        "#9E9E9E"   # Window-RBF
+    ]
+
+    if palette is None:
+        colores = [
+            default_colors[i % len(default_colors)]
+            for i in indices_validos
+        ]
+
+    elif isinstance(palette, dict):
+        colores = [
+            palette.get(
+                nombre,
+                default_colors[j % len(default_colors)]
+            )
+            for j, nombre in enumerate(nombres_validos)
+        ]
+
+    else:
+        if len(palette) < len(datos):
+            raise ValueError(
+                "The palette must contain one color "
+                "for each dataset."
+            )
+
+        colores = [
+            palette[i]
+            for i in indices_validos
+        ]
+
+    # Patrones opcionales para impresión en escala de grises.
+    if hatches is None:
+        patrones = [""] * len(datos_limpios)
+    else:
+        if len(hatches) < len(datos):
+            raise ValueError(
+                "The hatches list must contain one value "
+                "for each dataset."
+            )
+
+        patrones = [
+            hatches[i]
+            for i in indices_validos
+        ]
+
+    # ---------------------------------------------------------
+    # Estilo general
+    # ---------------------------------------------------------
+    style = {
+        "font.family": "DejaVu Sans",
+        "font.size": 10,
+        "axes.labelsize": 10.5,
+        "axes.titlesize": 11.5,
+        "xtick.labelsize": 9.5,
+        "ytick.labelsize": 9.5
+    }
+
+    with plt.rc_context(style):
+
+        fig, ax = plt.subplots(
+            figsize=figsize,
+            constrained_layout=True
+        )
+
+        positions = np.arange(
+            1,
+            len(datos_limpios) + 1
+        )
+
+        # -----------------------------------------------------
+        # Diagramas de caja
+        # -----------------------------------------------------
+        bp = ax.boxplot(
+            datos_limpios,
+            positions=positions,
+            patch_artist=True,
+            widths=0.52,
+            whis=1.5,
+            showfliers=not show_points,
+            medianprops={
+                "color": "#202020",
+                "linewidth": 1.7
+            },
+            whiskerprops={
+                "color": "#404040",
+                "linewidth": 1.1
+            },
+            capprops={
+                "color": "#404040",
+                "linewidth": 1.1
+            },
+            boxprops={
+                "edgecolor": "#404040",
+                "linewidth": 1.1
+            },
+            flierprops={
+                "marker": "o",
+                "markersize": 3.5,
+                "markerfacecolor": "#A0A0A0",
+                "markeredgecolor": "#404040",
+                "markeredgewidth": 0.4,
+                "alpha": 0.55
+            }
+        )
+
+        rng = np.random.default_rng(42)
+
+        for i, (
+            valores,
+            color,
+            patron
+        ) in enumerate(
+            zip(
+                datos_limpios,
+                colores,
+                patrones
+            ),
+            start=1
+        ):
+            box = bp["boxes"][i - 1]
+
+            box.set_facecolor(color)
+            box.set_alpha(0.65)
+            box.set_hatch(patron)
+            box.set_zorder(2)
+
+            if show_points:
+                x = i + rng.uniform(
+                    -jitter,
+                    jitter,
+                    size=valores.size
+                )
+
+                ax.scatter(
+                    x,
+                    valores,
+                    s=point_size,
+                    color=color,
+                    alpha=point_alpha,
+                    edgecolor="#303030",
+                    linewidth=0.35,
+                    zorder=3
+                )
+
+        # Las medianas quedan por encima de los puntos.
+        for median in bp["medians"]:
+            median.set_zorder(4)
+
+        # -----------------------------------------------------
+        # Ejes y etiquetas
+        # -----------------------------------------------------
+        ax.set_xticks(positions)
+        ax.set_xticklabels(nombres_validos)
+
+        if xlabel is not None:
+            ax.set_xlabel(
+                xlabel,
+                labelpad=7
+            )
+
+        ax.set_ylabel(
+            ylabel,
+            labelpad=7
+        )
+
+        if titulo:
+            ax.set_title(
+                titulo,
+                pad=10,
+                fontweight="semibold"
+            )
+
+        if ylim is not None:
+            ax.set_ylim(ylim)
+
+        ax.set_xlim(
+            0.5,
+            len(datos_limpios) + 0.5
+        )
+
+        # Separación entre métodos optimizados y ventana fija.
+        if (
+            separator_after is not None
+            and 0 < separator_after < len(datos_limpios)
+        ):
+            ax.axvline(
+                x=separator_after + 0.5,
+                color="#BDBDBD",
+                linestyle=":",
+                linewidth=0.9,
+                alpha=0.85,
+                zorder=0
+            )
+
+        # -----------------------------------------------------
+        # Cuadrícula y bordes
+        # -----------------------------------------------------
+        ax.set_axisbelow(True)
+
+        ax.grid(
+            axis="y",
+            color="#D8D8D8",
+            linestyle="--",
+            linewidth=0.7,
+            alpha=0.65
+        )
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        ax.spines["left"].set_color("#555555")
+        ax.spines["bottom"].set_color("#555555")
+
+        ax.spines["left"].set_linewidth(0.8)
+        ax.spines["bottom"].set_linewidth(0.8)
+
+        ax.tick_params(
+            axis="both",
+            width=0.8,
+            color="#555555"
+        )
+
+        # -----------------------------------------------------
+        # Guardado y visualización
+        # -----------------------------------------------------
+        if save_path is not None:
+            fig.savefig(
+                save_path,
+                dpi=dpi,
+                bbox_inches="tight",
+                facecolor="white"
+            )
+
+        if show:
+            plt.show()
+
+    return fig, ax

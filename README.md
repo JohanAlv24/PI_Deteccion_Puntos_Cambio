@@ -1,346 +1,309 @@
-# Algoritmo CDP Paralelizado
+# Detección gaussiana de puntos de cambio en series de tiempo univariadas
 
-Este proyecto implementa dos enfoques para la detección de puntos de cambio en series de tiempo:
+Este repositorio implementa un método fuera de línea para detectar múltiples
+puntos de cambio en series de tiempo univariadas. El procedimiento representa
+cada ventana mediante una distribución gaussiana construida sobre coordenadas
+retardadas y compara ventanas adyacentes con la distancia de Wasserstein de
+orden dos.
 
-- **Algoritmo gaussiano** (`Algoritmo_Gaussiano/`)
-- **Algoritmo empírico** (`Algoritmo_Empiricas/`)
+La implementación principal se encuentra en la clase `CPD`, incluida en
+`Algoritmo_Gaussiano/cpd.py`.
 
-Además, incluye utilidades para:
-- búsqueda de hiperparámetros,
-- visualización de resultados,
-- generación de boxplots comparativos,
-- y experimentación con series sintéticas.
+## Descripción del método
 
----
+Para una serie univariada
 
-## 1. Requisitos generales
-
-El proyecto trabaja con:
-
-- `numpy`
-- `scipy`
-- `matplotlib`
-- `seaborn`
-- `pandas`
-
----
-
-## 2. Uso de `best_params_sh`
-
-La función `best_params_sh` centraliza la calibración de parámetros, la detección de puntos de cambio y la generación opcional de gráficas.
-
-### Firma actual
-
-```python
-best_params_sh(
-    dataset,
-    cps,
-    path='',
-    name='',
-    s_thresh=0,
-    penal=True,
-    lambda_p=0,
-    modo='Gaussiano',
-    given=True,
-    geom=True,
-    visualization=None
-)
+```text
+x[0], x[1], ..., x[T-1].
 ```
 
-### Parámetros principales
+Y cada ventana de longitud `w`, el método realiza los siguientes pasos:
 
-- `dataset`: serie de tiempo a analizar.
-- `cps`: puntos de cambio reales, usados para evaluación.
-- `path`: ruta base para guardar figuras.
-- `name`: sufijo de nombre para archivos.
-- `s_thresh`: umbral usado en la heurística de codo cuando aplica.
-- `penal`: activa o desactiva penalización.
-- `lambda_p`: regularizador de la penalización.
-- `modo`: Si `Gaussiano` usa el algoritmo gaussiano; `Empírico` usa el empírico.
-- `given`: indica si el umbral del codo es dado o estimado.
-- `geom`: selecciona el método geométrico para hallar el codo.
-- `visualization`: diccionario de banderas para controlar gráficas.
+1. Construye vectores de coordenadas retardadas de dimensión `m` y retardo
+   `t`:
 
-### Claves disponibles en `visualization`
+   ```text
+   (x[j], x[j+t], ..., x[j+(m-1)t]).
+   ```
 
-```python
-visualization = {
-    "summary": True,
-    "raw_distance": True,
-    "smooth_distance": True,
-    "cost": True,
-    "slope": True
-}
+2. Puede añadir una coordenada temporal normalizada mediante
+   `temporal_comp=True`.
+3. Estima la media y la matriz de covarianzas de los vectores contenidos en
+   cada ventana.
+4. Compara dos ventanas adyacentes y no solapadas mediante la distancia de
+   Wasserstein entre distribuciones gaussianas:
+
+   ```text
+   W2² = ||mu_1 - mu_2||²
+         + tr(Sigma_1 + Sigma_2
+         - 2(Sigma_1^(1/2) Sigma_2 Sigma_1^(1/2))^(1/2)).
+   ```
+
+5. Suaviza el perfil de discrepancia con un filtro triangular cuando
+   `smooth=True`.
+6. Identifica máximos locales relevantes con la función `detect`.
+
+Para una serie de longitud `T` y una ventana de tamaño `w`, el perfil contiene
+`T - 2w + 1` valores. La función `detect` incorpora automáticamente el
+desplazamiento de `w` observaciones y devuelve los puntos de cambio en los
+índices de la serie original.
+
+## Estructura principal
+
+```text
+Algoritmo_Gaussiano/
+├── cpd.py                 # Clase CPD y calibración gaussiana
+└── workers.py             # Evaluación paralela de configuraciones (w, t)
+
+Utils/
+├── detection.py           # Selección de máximos locales
+├── metrics_sup.py         # Métricas de evaluación
+└── tools.py               # Calibración y visualización
 ```
 
-### Qué hace cada bandera
+El repositorio también conserva una implementación empírica utilizada como
+referencia experimental.
 
-- `"summary"`: genera la figura resumen del algoritmo.
-- `"raw_distance"`: muestra la distancia de Wasserstein sin suavizar.
-- `"smooth_distance"`: muestra la distancia suavizada.
-- `"cost"`: genera mapas de calor o dispersión de costos, según el método.
-- `"slope"`: activa la gráfica de slope heuristic.
+## Requisitos
 
-### Ejemplo de uso
-
-```python
-from Utils.tools import best_params_sh
-
-visualization = {
-    "summary": True,
-    "raw_distance": True,
-    "smooth_distance": True,
-    "cost": True,
-    "slope": True
-}
-
-metrics_gauss = best_params_sh(
-    dataset=serie,
-    cps=changepoints_true,
-    path='Graficas/',
-    name='ejemplo_01',
-    s_thresh=0,
-    penal=True,
-    lambda_p=0,
-    modo='Gaussiano',
-    given=True,
-    geom=True,
-    visualization=visualization
-)
+```bash
+pip install numpy scipy matplotlib seaborn pandas csaps
 ```
 
-### Ejemplo con método empírico
+Los ejemplos deben ejecutarse desde la raíz del proyecto para que Python pueda
+resolver los módulos `Algoritmo_Gaussiano` y `Utils`.
 
-```python
-metrics_emp = best_params_sh(
-    dataset=serie,
-    cps=changepoints_true,
-    path='Graficas/',
-    name='ejemplo_empirico',
-    s_thresh=0,
-    penal=True,
-    lambda_p=0,
-    modo='Empírico',
-    given=True,
-    geom=True,
-    visualization=visualization
-)
-```
+## Uso básico con una ventana fija
 
----
-
-## 3. Generación de boxplots comparativos
-
-La función `boxplot_comp` permite comparar dos matrices o conjuntos de resultados mediante boxplots.
-
-### Firma esperada
-
-```python
-boxplot_comp(M1, M2, columnas, title, path)
-```
-
-### Parámetros
-
-- `M1`: primera matriz de datos.
-- `M2`: segunda matriz de datos.
-- `columnas`: nombres de columnas para la visualización.
-- `title`: título general de la figura.
-- `path`: ruta base donde se guarda la figura.
-
-### Qué hace
-
-La función organiza los datos en formato largo y genera boxplots comparando:
-
-- **Gaussiana**
-- **Empírica**
-
-según las columnas seleccionadas. Es usado para comparar las métricas generadas por ambos métodos
-
-### Ejemplo de uso
-
-```python
-from Utils.tools import boxplot_comp
-
-boxplot_comp(
-    M1=resultados_gauss,
-    M2=resultados_emp,
-    columnas = ['Mean Location Error', 'Precision', 'Recall', 'F1 Score', 'Accuracy', 'Falsos Positivos', 'Falsos Negativos', 'Verdaderos Positivos'],
-    title='Comparación de métricas',
-    path='Graficas/boxplot_comparacion.png'
-)
-```
-
----
-
-## 4. Experimentación con series sintéticas
-
-El archivo `Series_Prueba/experimentos.py` contiene funciones para generar datos sintéticos y evaluar el desempeño de los algoritmos.
-
-### Función principal
-
-```python
-samples_200_arma(...)
-```
-
-### Propósito
-
-Genera `N` series sintéticas tipo ARMA con cambios de régimen y outliers, y luego evalúa:
-
-- algoritmo gaussiano,
-- algoritmo empírico.
-
-### Firma resumida
-
-```python
-samples_200_arma(
-    seed,
-    N=200,
-    thr_dist=30,
-    T=2000,
-    phi=(0.3, 0.5),
-    theta=(0.0, 0.0),
-    random_phi=False,
-    random_theta=False,
-    min_seg=50,
-    max_seg=150,
-    base_mean=0.0,
-    random_mean=True,
-    mean_range=(-1.0, 1.0),
-    base_std=0.5,
-    random_std=True,
-    std_range=(0.2, 1.2),
-    outlier_interval=200,
-    outlier_scale=6.0,
-    s_thresh=0,
-    seed2=None,
-    tail=False,
-    tail_list=None,
-    given=True,
-    geom=True,
-    visualization=None
-)
-```
-
-### Parámetros importantes
-
-- `seed`: semilla global.
-- `N`: número de experimentos.
-- `thr_dist`: tolerancia usada en la evaluación.
-- `T`: longitud de la serie sintética.
-- `tail=True`: ejecuta únicamente los experimentos listados en `tail_list`.
-- `visualization`: activa las figuras de resumen, distancias, costeo y slope heuristic.
-
-### Ejemplo básico
-
-```python
-from Series_Prueba.experimentos import samples_200_arma
-
-visualization = {
-    "summary": True,
-    "raw_distance": True,
-    "smooth_distance": True,
-    "cost": True,
-    "slope": True
-}
-
-metricas_gauss, metricas_emp = samples_200_arma(
-    seed=1234,
-    N=5,
-    T=2000,
-    random_phi=True,
-    random_theta=True,
-    tail=False,
-    given=True,
-    geom=True,
-    visualization=visualization
-)
-```
-
-### Ejemplo usando `tail`
-
-```python
-metricas_gauss, metricas_emp = samples_200_arma(
-    seed=1234,
-    N=10,
-    tail=True,
-    tail_list=[2, 5, 8],
-    visualization=visualization
-)
-```
-
-En este caso solo se ejecutan los experimentos 2, 5 y 8.
-
-## 5. Uso directo de los algoritmos (sin búsqueda exhaustiva)
-
-En algunos escenarios puede ser conveniente fijar manualmente los hiperparámetros del algoritmo y omitir la búsqueda exhaustiva realizada por `best_params_sh`. Esto permite evaluar directamente una configuración específica.
-
-### Ejemplo con el método empírico
-
-```python
-from Algoritmo_Empiricas.Empirical_CPD import EmpiricalCPD
-from Utils.detection import detect
-from Utils.metrics_sup import metrics
-
-# Serie de tiempo
-serie = ...
-
-# Puntos de cambio reales
-cps_reales = ...
-
-algoritmo_emp = EmpiricalCPD(
-    serie,
-    window=100
-)
-
-distancias_emp = algoritmo_emp.distancias()
-
-pc_detectados_emp = detect(
-    distancias_emp,
-    window=100
-)
-
-metricas_emp = metrics(
-    cps_reales,
-    pc_detectados_emp,
-    threshold=50,
-    T=len(serie)
-)
-```
-
-### Ejemplo con el método gaussiano
+El siguiente ejemplo construye el perfil gaussiano, detecta los puntos de
+cambio y calcula las métricas cuando se dispone de anotaciones de referencia.
 
 ```python
 from Algoritmo_Gaussiano.cpd import CPD
 from Utils.detection import detect
 from Utils.metrics_sup import metrics
 
-# Serie de tiempo
-serie = ...
 
-# Puntos de cambio reales
+serie = ...
 cps_reales = ...
 
-algoritmo_gauss = CPD(
+w = 100
+delta = 50
+
+cpd_gauss = CPD(
     serie,
-    window=100,
-    t=10
+    window=w,
+    t=1,
+    m=3,
+    medias=True,
+    smooth=True,
+    temporal_comp=True
 )
 
-distancias_gauss = algoritmo_gauss.distancias()
+distancias_gauss = cpd_gauss.distancias()
 
-pc_detectados_gauss = detect(
+cps_detectados_gauss = detect(
     distancias_gauss,
-    window=100
+    window=w,
+    prominence_ratio=0.05
 )
 
-metricas_gauss = metrics(
+metricas_gauss, emparejamientos = metrics(
     cps_reales,
-    pc_detectados_gauss,
-    threshold=50,
+    cps_detectados_gauss,
+    threshold=delta,
     T=len(serie)
 )
+
+print("Puntos detectados:", cps_detectados_gauss)
+print("Métricas:", metricas_gauss)
 ```
----
+
+La detección no utiliza `cps_reales`. Estas anotaciones intervienen únicamente
+en la evaluación posterior.
 
 
+Los parámetros relevantes para el flujo principal son:
 
+| Parámetro | Descripción |
+|---|---|
+| `X` | Serie de tiempo univariada. |
+| `window` | Número de observaciones en cada ventana. Debe permitir formar dos ventanas adyacentes dentro de la serie. |
+| `t` | Retardo entre coordenadas consecutivas. En el uso directo se recomienda especificar un entero positivo. |
+| `m` | Dimensión de la reconstrucción por coordenadas retardadas. |
+| `medias` | Si es `True`, incluye la diferencia entre medias; si es `False`, utiliza únicamente el término de covarianzas. |
+| `smooth` | Activa el filtro triangular sobre el perfil de discrepancia. |
+| `temporal_comp` | Añade una coordenada temporal normalizada a cada vector retardado. |
+| `min_comp` | Añade el mínimo de cada vector retardado. |
+| `max_comp` | Añade el máximo de cada vector retardado. |
+| `max_bandwidth` | Limita el semiancho del filtro triangular mediante la longitud de la serie. |
+| `prominence_ratio` | Proporción del rango entre los cuantiles 0.05 y 0.95 utilizada para descartar máximos con contraste local muy reducido. |
+
+## Detección de máximos
+
+La función de detección es de la siguiente forma:
+
+```python
+detect(
+    distancias,
+    window,
+    prominence_ratio=0.05,
+    thr=0,
+    min_separation=0
+)
+```
+
+Primero identifica los máximos locales del perfil. Después conserva aquellos
+cuya prominencia representa al menos `prominence_ratio` del intervalo
+comprendido entre los cuantiles 0.05 y 0.95 de la curva. Este intervalo reduce
+la influencia de valores extremos aislados.
+
+El parámetro `min_separation` es opcional. Cuando es mayor que uno, los máximos
+se examinan por orden decreciente de prominencia y solo se conservan
+detecciones separadas por al menos esa cantidad de observaciones. En caso de
+empate se prioriza la mayor altura y, posteriormente, el menor índice temporal.
+
+Para reproducir en la detección final la separación mínima utilizada al
+evaluar configuraciones dentro de `opt_window_t`, puede emplearse:
+
+```python
+min_separation = (
+    (cpd_gauss.m - 1) * cpd_gauss.t
+    + cpd_gauss.m
+    + int(cpd_gauss.temporal_comp)
+    + 1
+)
+
+cps_detectados_gauss = detect(
+    distancias_gauss,
+    window=cpd_gauss.window,
+    prominence_ratio=cpd_gauss.prominence_ratio,
+    min_separation=min_separation
+)
+```
+
+## Métricas de evaluación
+
+La función
+
+```python
+metrics(original_pc, detect_pc, threshold, T)
+```
+
+realiza un emparejamiento uno a uno dentro de la tolerancia `threshold` y
+devuelve:
+
+```python
+metricas, emparejamientos = metrics(...)
+```
+
+El diccionario `metricas` contiene:
+
+- `Mean Location Error`;
+- `Precision`;
+- `Recall`;
+- `F1 Score`;
+- `Accuracy`;
+- `Falsos Positivos`;
+- `Falsos Negativos`;
+- `Verdaderos Positivos`.
+
+## Visualización
+
+Después de ejecutar `distancias()`, la misma instancia permite visualizar el
+perfil o un resumen de la detección:
+
+```python
+cpd_gauss.plot_distancias(
+    suavizada=True,
+    show=True
+)
+
+cpd_gauss.plot_resumen(
+    cps=cps_reales,
+    pc_detectados=cps_detectados_gauss,
+    show=True
+)
+```
+
+Las curvas sin procesar y suavizada quedan disponibles en:
+
+```python
+cpd_gauss.distancias_raw_
+cpd_gauss.distancias_smooth_
+```
+
+## Calibración de ventana y retardo
+
+La función `best_params_sh`, definida en `Utils/tools.py`, permite realizar una
+búsqueda exhaustiva de los parámetros gaussianos y aplicar la heurística de la
+pendiente a la penalización por complejidad.
+
+```python
+from Utils.tools import best_params_sh
+
+
+visualization = {
+    "summary": False,
+    "raw_distance": False,
+    "smooth_distance": False,
+    "cost": False,
+    "slope": False
+}
+
+resultado_metricas, cps_detectados = best_params_sh(
+    dataset=serie,
+    cps=cps_reales,
+    modo="Gaussiano",
+    penal=True,
+    min_w=30,
+    max_w=200,
+    t_given=1,
+    mean_gauss=True,
+    temporal_comp=True,
+    smooth_distances=True,
+    prominence_ratio=0.05,
+    thr_dist=delta,
+    visualization=visualization,
+    return_cps_list=True,
+    save_fig=False
+)
+
+metricas_optimizadas, emparejamientos = (
+    resultado_metricas
+)
+```
+
+Los límites `min_w` y `max_w` son inclusivos. Si `t_given` es un entero, el
+retardo queda fijo y la búsqueda se realiza únicamente sobre la ventana. Si
+`t_given=None`, se exploran los retardos estadísticamente factibles para cada
+tamaño de ventana.
+
+Los puntos de cambio de referencia suministrados en `cps` se utilizan para
+calcular las métricas y para las visualizaciones solicitadas; no intervienen en
+la función de costo empleada para seleccionar los parámetros.
+
+
+## Flujo recomendado
+
+```text
+Serie univariada
+        |
+        v
+Coordenadas retardadas por ventana
+        |
+        v
+Media y matriz de covarianzas
+        |
+        v
+Perfil de Wasserstein entre ventanas adyacentes
+        |
+        v
+Suavizado triangular
+        |
+        v
+Selección de máximos locales
+        |
+        v
+Puntos de cambio detectados
+```

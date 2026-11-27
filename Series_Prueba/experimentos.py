@@ -1,22 +1,8 @@
 import numpy as np
-import roerich
-from roerich.change_point import ChangePointDetectionClassifier
 from Algoritmo_Gaussiano.cpd import CPD
 from Algoritmo_Empiricas.Empirical_CPD import EmpiricalCPD
 from Utils.detection import detect
 from Utils.metrics_sup import metrics
-from Utils.tools import (
-    best_params_sh,
-    print_toolbox_header,
-    print_toolbox_section,
-    print_toolbox_item,
-    print_metrics_block,
-    print_toolbox_success,
-    print_toolbox_warning
-)
-
-from Series_Prueba.periodical_data import generar_series_pc, serie_pc
-
 
 
 #Condición de estabilidad para los rezagos
